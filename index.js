@@ -201,3 +201,4 @@ app.get('/api/current-commission/:userId', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
+
