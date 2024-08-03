@@ -22,12 +22,8 @@ app.use(express.json());
 // Create a new user
 app.post('/api/create-user', async (req, res) => {
     const { username, email } = req.body;
-
     try {
-        // Create a new user ID
         const newUserRef = admin.database().ref('users').push();
-
-        // User data
         const userData = {
             username,
             email,
@@ -37,11 +33,7 @@ app.post('/api/create-user', async (req, res) => {
             currentCommission: 0,
             transactionHistory: []
         };
-
-        // Save user data
         await newUserRef.set(userData);
-
-        // Return the new user ID
         res.json({ userId: newUserRef.key });
     } catch (error) {
         console.error('Error creating user:', error);
@@ -49,118 +41,21 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-// Handle transactions and update commissions
-app.post('/api/transaction', async (req, res) => {
-    const { userId, amount } = req.body;
-
+// Update commission values
+app.post('/api/update-commission', async (req, res) => {
+    const { userId, commissionToday, commissionThisWeek, commissionThisMonth, currentCommission } = req.body;
     try {
         const userRef = admin.database().ref(`users/${userId}`);
-        const snapshot = await userRef.once('value');
-        const userData = snapshot.val() || {};
-
-        const newTransaction = {
-            amount,
-            timestamp: Date.now()
-        };
-
-        const updatedCommissionToday = (userData.commissionToday || 0) + amount;
-        const updatedCommissionThisWeek = (userData.commissionThisWeek || 0) + amount;
-        const updatedCommissionThisMonth = (userData.commissionThisMonth || 0) + amount;
-        const updatedCurrentCommission = (userData.currentCommission || 0) + amount;
-
         await userRef.update({
-            commissionToday: updatedCommissionToday,
-            commissionThisWeek: updatedCommissionThisWeek,
-            commissionThisMonth: updatedCommissionThisMonth,
-            currentCommission: updatedCurrentCommission,
-            transactionHistory: [...(userData.transactionHistory || []), newTransaction],
+            commissionToday,
+            commissionThisWeek,
+            commissionThisMonth,
+            currentCommission
         });
-
-        res.json({ message: 'Transaction processed successfully' });
+        res.json({ message: 'Commission updated successfully' });
     } catch (error) {
-        console.error('Error processing transaction:', error);
-        res.status(500).json({ message: 'Error processing transaction' });
-    }
-});
-
-// Scheduled task to reset daily commissions
-cron.schedule('0 0 * * *', async () => {
-    console.log('Running daily commission reset job...');
-    
-    try {
-        const usersRef = admin.database().ref('users');
-        const snapshot = await usersRef.once('value');
-        const users = snapshot.val();
-
-        if (users) {
-            for (const userId in users) {
-                const user = users[userId];
-                const { commissionToday, commissionThisWeek, commissionThisMonth } = user;
-
-                // Add today's commission to weekly and monthly, then reset commissionToday
-                await usersRef.child(userId).update({
-                    commissionToday: 0, // Reset commissionToday for the new day
-                    commissionThisWeek: (commissionThisWeek || 0) + (commissionToday || 0),
-                    commissionThisMonth: (commissionThisMonth || 0) + (commissionToday || 0),
-                });
-            }
-        }
-        console.log('Daily commission reset completed.');
-    } catch (error) {
-        console.error('Error resetting daily commission:', error);
-    }
-});
-
-// Scheduled task to reset weekly commissions
-cron.schedule('0 0 * * 0', async () => {
-    console.log('Running weekly commission reset job...');
-    
-    try {
-        const usersRef = admin.database().ref('users');
-        const snapshot = await usersRef.once('value');
-        const users = snapshot.val();
-
-        if (users) {
-            for (const userId in users) {
-                const user = users[userId];
-                const { commissionThisWeek } = user;
-
-                // Reset commissionThisWeek
-                await usersRef.child(userId).update({
-                    commissionThisWeek: 0,
-                });
-            }
-        }
-        console.log('Weekly commission reset completed.');
-    } catch (error) {
-        console.error('Error resetting weekly commission:', error);
-    }
-});
-
-// Scheduled task to reset monthly commissions
-cron.schedule('0 0 1 * *', async () => {
-    console.log('Running monthly commission reset job...');
-    
-    try {
-        const usersRef = admin.database().ref('users');
-        const snapshot = await usersRef.once('value');
-        const users = snapshot.val();
-
-        if (users) {
-            for (const userId in users) {
-                const user = users[userId];
-
-                // Reset commissionThisMonth and currentCommission
-                await usersRef.child(userId).update({
-                    commissionThisMonth: 0,
-                    currentCommission: 0,
-                    transactionHistory: [], // Clear transaction history to reset current commission
-                });
-            }
-        }
-        console.log('Monthly commission reset completed.');
-    } catch (error) {
-        console.error('Error resetting monthly commission:', error);
+        console.error('Error updating commission:', error);
+        res.status(500).json({ message: 'Error updating commission' });
     }
 });
 
@@ -177,7 +72,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
     }
 });
 
-// Fetch today's commission based on user ID
+// Fetch commission details based on user ID
 app.get('/api/commission-today/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
@@ -190,7 +85,6 @@ app.get('/api/commission-today/:userId', async (req, res) => {
     }
 });
 
-// Fetch this week's commission based on user ID
 app.get('/api/commission-this-week/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
@@ -203,7 +97,6 @@ app.get('/api/commission-this-week/:userId', async (req, res) => {
     }
 });
 
-// Fetch this month's commission based on user ID
 app.get('/api/commission-this-month/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
@@ -216,7 +109,6 @@ app.get('/api/commission-this-month/:userId', async (req, res) => {
     }
 });
 
-// Fetch current commission based on user ID
 app.get('/api/current-commission/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
