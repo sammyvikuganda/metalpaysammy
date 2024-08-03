@@ -1,5 +1,6 @@
-// Create a new user
 app.post('/api/create-user', async (req, res) => {
+    console.log('Request body:', req.body); // Log the request body for debugging
+
     const { username, email } = req.body;
 
     try {
@@ -23,7 +24,7 @@ app.post('/api/create-user', async (req, res) => {
         // Return the new user ID
         res.json({ userId: newUserRef.key });
     } catch (error) {
-        console.error('Error creating user:', error);
+        console.error('Error creating user:', error); // Log the error
         res.status(500).json({ message: 'Error creating user' });
     }
 });
