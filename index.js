@@ -1,27 +1,29 @@
-const express = require('express');
-const cors = require('cors');
-const admin = require('firebase-admin');
-const cron = require('node-cron');
+// Create a new user
+app.post('/api/create-user', async (req, res) => {
+    const { username, email } = req.body;
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+    try {
+        // Create a new user ID
+        const newUserRef = admin.database().ref('users').push();
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  }),
-  databaseURL: "https://metal-pay-55c31-default-rtdb.firebaseio.com",
-});
+        // User data
+        const userData = {
+            username,
+            email,
+            commissionToday: 0,
+            commissionThisWeek: 0,
+            commissionThisMonth: 0,
+            currentCommission: 0,
+            transactionHistory: []
+        };
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+        // Save user data
+        await newUserRef.set(userData);
 
-// Define routes here (create-user, transaction, etc.)
-
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+        // Return the new user ID
+        res.json({ userId: newUserRef.key });
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(500).json({ message: 'Error creating user' });
+    }
 });
