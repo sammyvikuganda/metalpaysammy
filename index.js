@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const cron = require('node-cron');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -12,7 +11,7 @@ admin.initializeApp({
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     }),
-    databaseURL: "https://metal-pay-55c31-default-rtdb.firebaseio.com",
+    databaseURL: "https://your-database-name.firebaseio.com",
 });
 
 // Middleware
@@ -41,21 +40,41 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-// Update commission values
-app.post('/api/update-commission', async (req, res) => {
-    const { userId, commissionToday, commissionThisWeek, commissionThisMonth, currentCommission } = req.body;
+// Handle transactions and update commissions
+app.post('/api/transaction', async (req, res) => {
+    const { userId, amount } = req.body;
     try {
         const userRef = admin.database().ref(`users/${userId}`);
+        const snapshot = await userRef.once('value');
+        const userData = snapshot.val() || {};
+        const newTransaction = {
+            amount,
+            timestamp: Date.now()
+        };
         await userRef.update({
-            commissionToday,
-            commissionThisWeek,
-            commissionThisMonth,
-            currentCommission
+            commissionToday: (userData.commissionToday || 0) + amount,
+            commissionThisWeek: (userData.commissionThisWeek || 0) + amount,
+            commissionThisMonth: (userData.commissionThisMonth || 0) + amount,
+            currentCommission: (userData.currentCommission || 0) + amount,
+            transactionHistory: [...(userData.transactionHistory || []), newTransaction],
         });
-        res.json({ message: 'Commission updated successfully' });
+        res.json({ message: 'Transaction processed successfully' });
     } catch (error) {
-        console.error('Error updating commission:', error);
-        res.status(500).json({ message: 'Error updating commission' });
+        console.error('Error processing transaction:', error);
+        res.status(500).json({ message: 'Error processing transaction' });
+    }
+});
+
+// Fetch commission values
+app.get('/api/commission/:type/:userId', async (req, res) => {
+    const { type, userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = snapshot.val() || {};
+        res.json({ [`${type}Commission`]: userData[`commission${capitalizeFirstLetter(type)}`] || 0 });
+    } catch (error) {
+        console.error(`Error fetching commission ${type}:`, error);
+        res.status(500).json({ message: `Error fetching commission ${type}` });
     }
 });
 
@@ -72,54 +91,9 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
     }
 });
 
-// Fetch commission details based on user ID
-app.get('/api/commission-today/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/commissionToday`).once('value');
-        const commissionToday = snapshot.val() || 0;
-        res.json({ commissionToday });
-    } catch (error) {
-        console.error('Error fetching commission today:', error);
-        res.status(500).json({ message: 'Error fetching commission today' });
-    }
-});
-
-app.get('/api/commission-this-week/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/commissionThisWeek`).once('value');
-        const commissionThisWeek = snapshot.val() || 0;
-        res.json({ commissionThisWeek });
-    } catch (error) {
-        console.error('Error fetching commission this week:', error);
-        res.status(500).json({ message: 'Error fetching commission this week' });
-    }
-});
-
-app.get('/api/commission-this-month/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/commissionThisMonth`).once('value');
-        const commissionThisMonth = snapshot.val() || 0;
-        res.json({ commissionThisMonth });
-    } catch (error) {
-        console.error('Error fetching commission this month:', error);
-        res.status(500).json({ message: 'Error fetching commission this month' });
-    }
-});
-
-app.get('/api/current-commission/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/currentCommission`).once('value');
-        const currentCommission = snapshot.val() || 0;
-        res.json({ currentCommission });
-    } catch (error) {
-        console.error('Error fetching current commission:', error);
-        res.status(500).json({ message: 'Error fetching current commission' });
-    }
-});
+function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
 
 // Start the server
 app.listen(PORT, () => {
