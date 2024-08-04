@@ -30,7 +30,7 @@ app.post('/api/create-user', async (req, res) => {
             commissionThisWeek: 0,
             commissionThisMonth: 0,
             currentCommission: 0,
-            transactionHistory: []
+            transactionHistory: []  // Initialize as an empty array
         };
         await newUserRef.set(userData);
         res.json({ userId: newUserRef.key });
@@ -64,8 +64,11 @@ app.post('/api/transaction', async (req, res) => {
             commissionThisWeek: updatedCommissionThisWeek,
             commissionThisMonth: updatedCommissionThisMonth,
             currentCommission: updatedCurrentCommission,
-            transactionHistory: [...(userData.transactionHistory || []), newTransaction],
         });
+
+        // Add the new transaction to the transaction history
+        const transactionsRef = userRef.child('transactionHistory');
+        await transactionsRef.push(newTransaction);
 
         res.json({ message: 'Transaction processed successfully' });
     } catch (error) {
