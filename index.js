@@ -30,7 +30,10 @@ app.post('/api/create-user', async (req, res) => {
             commissionThisWeek: 0,
             commissionThisMonth: 0,
             currentCommission: 0,
-            transactionHistory: []  // Initialize as an empty array
+            transactionHistory: {
+                Withdraw: [],
+                Deposit: []
+            }
         };
         await newUserRef.set(userData);
         res.json({ userId: newUserRef.key });
@@ -42,7 +45,7 @@ app.post('/api/create-user', async (req, res) => {
 
 // Handle transactions and update commissions
 app.post('/api/transaction', async (req, res) => {
-    const { userId, amount } = req.body;
+    const { userId, amount, commissionType, phoneNumber, transactionId } = req.body;
     try {
         const userRef = admin.database().ref(`users/${userId}`);
         const snapshot = await userRef.once('value');
@@ -50,25 +53,35 @@ app.post('/api/transaction', async (req, res) => {
 
         const newTransaction = {
             amount,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            phoneNumber: phoneNumber || "",
+            transactionId: transactionId || ""
         };
 
-        // Update commission values
-        const updatedCommissionToday = (userData.commissionToday || 0) + amount;
-        const updatedCommissionThisWeek = (userData.commissionThisWeek || 0) + amount;
-        const updatedCommissionThisMonth = (userData.commissionThisMonth || 0) + amount;
-        const updatedCurrentCommission = (userData.currentCommission || 0) + amount;
+        // Update commission values based on commissionType
+        let updateData = {};
+        switch (commissionType) {
+            case 'commissionToday':
+                updateData.commissionToday = (userData.commissionToday || 0) + amount;
+                break;
+            case 'commissionThisWeek':
+                updateData.commissionThisWeek = (userData.commissionThisWeek || 0) + amount;
+                break;
+            case 'commissionThisMonth':
+                updateData.commissionThisMonth = (userData.commissionThisMonth || 0) + amount;
+                break;
+            case 'currentCommission':
+                updateData.currentCommission = (userData.currentCommission || 0) + amount;
+                break;
+            default:
+                return res.status(400).json({ message: 'Invalid commission type' });
+        }
 
-        await userRef.update({
-            commissionToday: updatedCommissionToday,
-            commissionThisWeek: updatedCommissionThisWeek,
-            commissionThisMonth: updatedCommissionThisMonth,
-            currentCommission: updatedCurrentCommission,
-        });
+        await userRef.update(updateData);
 
         // Add the new transaction to the transaction history
         const transactionsRef = userRef.child('transactionHistory');
-        await transactionsRef.push(newTransaction);
+        await transactionsRef.child(commissionType).push(newTransaction);
 
         res.json({ message: 'Transaction processed successfully' });
     } catch (error) {
@@ -134,7 +147,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const snapshot = await admin.database().ref(`users/${userId}/transactionHistory`).once('value');
-        const transactionHistory = snapshot.val() || [];
+        const transactionHistory = snapshot.val() || {};
         res.json({ transactionHistory });
     } catch (error) {
         console.error('Error fetching transaction history:', error);
