@@ -67,14 +67,10 @@ function broadcast(event, data) {
     });
 }
 
-// Function to calculate growing money based on capital
+// Function to calculate and update growing money based on capital
 async function calculateGrowingMoney(userId) {
-    if (!userCache[userId]) {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        userCache[userId] = snapshot.val();
-    }
-    
-    const { capital, growingMoney, lastUpdated } = userCache[userId];
+    const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+    const { capital, growingMoney, lastUpdated } = snapshot.val();
     const currentTime = Date.now();
     const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
@@ -89,33 +85,29 @@ async function calculateGrowingMoney(userId) {
     return growingMoney;
 }
 
-// Update user data whenever capital or other relevant fields change
+// Update growing money and capital immediately
 app.post('/api/update-capital', async (req, res) => {
     const { userId, newCapital } = req.body;
     try {
-        if (!userCache[userId]) {
-            const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-            userCache[userId] = snapshot.val();
-        }
-
+        const newGrowingMoney = await calculateGrowingMoney(userId);
         const currentTime = Date.now();
-        const previousData = userCache[userId];
-        const growingMoney = await calculateGrowingMoney(userId);
 
-        // Update with new capital and recalculate growing money
+        // Update the database with new capital and recalculate growing money
         await admin.database().ref(`users/${userId}`).update({
             capital: newCapital,
-            growingMoney: growingMoney,
+            growingMoney: newGrowingMoney,
             lastUpdated: currentTime
         });
 
         // Update in-memory cache
-        userCache[userId].capital = newCapital;
-        userCache[userId].growingMoney = growingMoney;
-        userCache[userId].lastUpdated = currentTime;
+        userCache[userId] = {
+            capital: newCapital,
+            growingMoney: newGrowingMoney,
+            lastUpdated: currentTime
+        };
 
         // Notify clients about the update
-        broadcast('userUpdated', { userId, growingMoney });
+        broadcast('userUpdated', { userId, growingMoney: newGrowingMoney });
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating capital:', error);
@@ -131,9 +123,7 @@ const updateAllGrowingMoney = async () => {
     if (users) {
         const updates = {};
         for (const userId in users) {
-            const user = users[userId];
             const newGrowingMoney = await calculateGrowingMoney(userId);
-
             updates[`users/${userId}/growingMoney`] = newGrowingMoney;
             updates[`users/${userId}/lastUpdated`] = Date.now();
         }
@@ -142,6 +132,32 @@ const updateAllGrowingMoney = async () => {
 };
 
 setInterval(updateAllGrowingMoney, 12 * 60 * 60 * 1000); // 12 hours
+
+// Fetch the updated capital
+app.get('/api/earnings/capital/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const user = snapshot.val();
+        const capital = user ? user.capital : 0;
+        res.json({ capital });
+    } catch (error) {
+        console.error('Error fetching current capital:', error);
+        res.status(500).json({ message: 'Error fetching current capital' });
+    }
+});
+
+// Fetch the updated growing money
+app.get('/api/earnings/growing-money/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const newGrowingMoney = await calculateGrowingMoney(userId);
+        res.json({ growingMoney: newGrowingMoney });
+    } catch (error) {
+        console.error('Error fetching growing money:', error);
+        res.status(500).json({ message: 'Error fetching growing money' });
+    }
+});
 
 // Serve the dashboard
 app.get('/dashboard', (req, res) => {
