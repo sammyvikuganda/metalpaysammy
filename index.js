@@ -42,54 +42,74 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
+// In-memory cache for user data
+let userCache = {};
+
 // Function to calculate and update the main balance
 async function updateMainBalance(userId) {
-    const userRef = admin.database().ref(`users/${userId}`);
-    const snapshot = await userRef.once('value');
-    const userData = snapshot.val();
+    if (!userCache[userId]) {
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        userCache[userId] = snapshot.val();
+    }
+    
+    const { mainBalance, lastUpdated } = userCache[userId];
+    const currentTime = Date.now();
+    const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
-    if (userData) {
-        const { mainBalance, lastUpdated } = userData;
-        const currentTime = Date.now();
-        const elapsedSeconds = (currentTime - lastUpdated) / 1000;
+    if (elapsedSeconds > 0) {
+        // Calculate new balance based on 1.44% interest rate per 24 hours
+        const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
+        const newMainBalance = mainBalance * Math.pow(1 + interestRatePerSecond, elapsedSeconds);
 
-        if (elapsedSeconds > 0) {
-            // Calculate new balance based on 1.44% interest rate per 24 hours
-            const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
-            const newMainBalance = mainBalance * Math.pow(1 + interestRatePerSecond, elapsedSeconds);
+        // Update the in-memory cache
+        userCache[userId].mainBalance = newMainBalance;
+        userCache[userId].lastUpdated = currentTime;
 
-            await userRef.update({
-                mainBalance: newMainBalance,
-                lastUpdated: currentTime
-            });
-        }
+        // Update the database
+        await admin.database().ref(`users/${userId}`).update({
+            mainBalance: newMainBalance,
+            lastUpdated: currentTime
+        });
     }
 }
 
-// Schedule the balance update for all users every second
+// Batch process to update all users' balances
 const updateAllUserBalances = async () => {
-    const usersRef = admin.database().ref('users');
-    const snapshot = await usersRef.once('value');
+    const snapshot = await admin.database().ref('users').once('value');
     const users = snapshot.val();
 
     if (users) {
+        const updates = {};
         for (const userId in users) {
-            await updateMainBalance(userId);
+            const user = users[userId];
+            const { mainBalance, lastUpdated } = user;
+            const currentTime = Date.now();
+            const elapsedSeconds = (currentTime - lastUpdated) / 1000;
+
+            if (elapsedSeconds > 0) {
+                const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
+                const newMainBalance = mainBalance * Math.pow(1 + interestRatePerSecond, elapsedSeconds);
+
+                // Prepare batch update
+                updates[`users/${userId}/mainBalance`] = newMainBalance;
+                updates[`users/${userId}/lastUpdated`] = currentTime;
+            }
         }
+        // Perform batch update
+        await admin.database().ref().update(updates);
     }
 };
 
-// Run the balance update every second
-setInterval(updateAllUserBalances, 1000);
+// Run the balance update every minute to reduce reads/writes
+setInterval(updateAllUserBalances, 60000); // Run every 60 seconds
 
 // Fetch the updated main balance
 app.get('/api/earnings/current/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         await updateMainBalance(userId); // Update the main balance before fetching it
-        
-        const snapshot = await admin.database().ref(`users/${userId}/mainBalance`).once('value');
-        const mainBalance = snapshot.val() || 0;
+
+        const mainBalance = userCache[userId] ? userCache[userId].mainBalance : 0;
         res.json({ mainBalance });
     } catch (error) {
         console.error('Error fetching current balance:', error);
