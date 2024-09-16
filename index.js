@@ -36,9 +36,6 @@ app.post('/api/create-user', async (req, res) => {
         };
         await newUserRef.set(userData);
         res.json({ userId: newUserRef.key });
-        
-        // Start the balance update process
-        setInterval(() => updateMainBalance(newUserRef.key), 1000);
     } catch (error) {
         console.error('Error creating user:', error);
         res.status(500).json({ message: 'Error creating user' });
@@ -68,6 +65,22 @@ async function updateMainBalance(userId) {
         }
     }
 }
+
+// Schedule the balance update for all users every second
+const updateAllUserBalances = async () => {
+    const usersRef = admin.database().ref('users');
+    const snapshot = await usersRef.once('value');
+    const users = snapshot.val();
+
+    if (users) {
+        for (const userId in users) {
+            await updateMainBalance(userId);
+        }
+    }
+};
+
+// Run the balance update every second
+setInterval(updateAllUserBalances, 1000);
 
 // Fetch the updated main balance
 app.get('/api/earnings/current/:userId', async (req, res) => {
