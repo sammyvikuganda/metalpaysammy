@@ -36,6 +36,9 @@ app.post('/api/create-user', async (req, res) => {
         };
         await newUserRef.set(userData);
         res.json({ userId: newUserRef.key });
+        
+        // Start the balance update process
+        setInterval(() => updateMainBalance(newUserRef.key), 1000);
     } catch (error) {
         console.error('Error creating user:', error);
         res.status(500).json({ message: 'Error creating user' });
@@ -53,16 +56,10 @@ async function updateMainBalance(userId) {
         const currentTime = Date.now();
         const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
-        // Debugging log
-        console.log(`Updating user ${userId}: mainBalance=${mainBalance}, lastUpdated=${lastUpdated}, currentTime=${currentTime}, elapsedSeconds=${elapsedSeconds}`);
-
         if (elapsedSeconds > 0) {
             // Calculate new balance based on 1.44% interest rate per 24 hours
             const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
             const newMainBalance = mainBalance * Math.pow(1 + interestRatePerSecond, elapsedSeconds);
-
-            // Debugging log
-            console.log(`New calculated main balance: ${newMainBalance}`);
 
             await userRef.update({
                 mainBalance: newMainBalance,
@@ -77,7 +74,7 @@ app.get('/api/earnings/current/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         await updateMainBalance(userId); // Update the main balance before fetching it
-
+        
         const snapshot = await admin.database().ref(`users/${userId}/mainBalance`).once('value');
         const mainBalance = snapshot.val() || 0;
         res.json({ mainBalance });
@@ -86,8 +83,6 @@ app.get('/api/earnings/current/:userId', async (req, res) => {
         res.status(500).json({ message: 'Error fetching current balance' });
     }
 });
-
-// Other routes for transactions, earnings, and history...
 
 // Start the server
 app.listen(PORT, () => {
