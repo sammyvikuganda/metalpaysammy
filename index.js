@@ -29,8 +29,9 @@ app.post('/api/create-user', async (req, res) => {
             earningsToday: 0,
             earningsThisWeek: 0,
             earningsThisMonth: 0,
-            earnedBalance: 0, // New field to store earned money
-            Capital: 10000, // Set initial Capital to UGX 10,000
+            currentBalance: 0,
+            capital: 10000, // Set initial capital to UGX 10,000
+            growingMoney: 0, // Initialize growing money
             lastUpdated: Date.now(),
             transactionHistory: {}
         };
@@ -45,36 +46,37 @@ app.post('/api/create-user', async (req, res) => {
 // In-memory cache for user data
 let userCache = {};
 
-// Function to calculate and update the earnings (without topping up Capital)
-async function updateEarnings(userId) {
+// Function to calculate and update the growing money based on capital
+async function updateGrowingMoney(userId) {
     if (!userCache[userId]) {
         const snapshot = await admin.database().ref(`users/${userId}`).once('value');
         userCache[userId] = snapshot.val();
     }
-
-    const { Capital, earnedBalance, lastUpdated } = userCache[userId] || { Capital: 0, earnedBalance: 0, lastUpdated: Date.now() };
+    
+    const { capital, growingMoney, lastUpdated } = userCache[userId];
     const currentTime = Date.now();
     const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
     if (elapsedSeconds > 0) {
-        // Calculate interest based on Capital (without topping up Capital)
+        // Calculate new growing money based on 1.44% interest rate per 24 hours
         const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
-        const earnings = Capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - Capital;
+        const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
+        const newGrowingMoney = growingMoney + interestEarned;
 
-        // Update earned balance, but leave Capital unchanged
-        userCache[userId].earnedBalance = earnedBalance + earnings;
+        // Update the in-memory cache
+        userCache[userId].growingMoney = newGrowingMoney;
         userCache[userId].lastUpdated = currentTime;
 
         // Update the database
         await admin.database().ref(`users/${userId}`).update({
-            earnedBalance: userCache[userId].earnedBalance,
+            growingMoney: newGrowingMoney,
             lastUpdated: currentTime
         });
     }
 }
 
-// Batch process to update all users' earned balances
-const updateAllUserEarnings = async () => {
+// Batch process to update all users' growing money
+const updateAllGrowingMoney = async () => {
     const snapshot = await admin.database().ref('users').once('value');
     const users = snapshot.val();
 
@@ -82,16 +84,17 @@ const updateAllUserEarnings = async () => {
         const updates = {};
         for (const userId in users) {
             const user = users[userId];
-            const { Capital, earnedBalance, lastUpdated } = user;
+            const { capital, growingMoney, lastUpdated } = user;
             const currentTime = Date.now();
             const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
             if (elapsedSeconds > 0) {
                 const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
-                const earnings = Capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - Capital;
+                const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
+                const newGrowingMoney = growingMoney + interestEarned;
 
-                // Prepare batch update: Add earnings to earnedBalance, but don't modify Capital
-                updates[`users/${userId}/earnedBalance`] = earnedBalance + earnings;
+                // Prepare batch update
+                updates[`users/${userId}/growingMoney`] = newGrowingMoney;
                 updates[`users/${userId}/lastUpdated`] = currentTime;
             }
         }
@@ -100,20 +103,34 @@ const updateAllUserEarnings = async () => {
     }
 };
 
-// Run the earnings update every 12 hours to reduce reads/writes
-setInterval(updateAllUserEarnings, 12 * 60 * 60 * 1000); // 12 hours
+// Run the growing money update every 12 hours to reduce reads/writes
+setInterval(updateAllGrowingMoney, 12 * 60 * 60 * 1000); // 12 hours
 
-// Fetch the updated earnings and Capital
-app.get('/api/earnings/current/:userId', async (req, res) => {
+// Fetch the updated capital
+app.get('/api/earnings/capital/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        await updateEarnings(userId); // Update earnings before fetching it
-
-        const { Capital = 0, earnedBalance = 0 } = userCache[userId] || { Capital: 0, earnedBalance: 0 };
-        res.json({ Capital, earnedBalance });
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const user = snapshot.val();
+        const capital = user ? user.capital : 0;
+        res.json({ capital });
     } catch (error) {
-        console.error('Error fetching current earnings:', error);
-        res.status(500).json({ message: 'Error fetching current earnings' });
+        console.error('Error fetching current capital:', error);
+        res.status(500).json({ message: 'Error fetching current capital' });
+    }
+});
+
+// Fetch the updated growing money
+app.get('/api/earnings/growing-money/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        await updateGrowingMoney(userId); // Update the growing money before fetching it
+
+        const growingMoney = userCache[userId] ? userCache[userId].growingMoney : 0;
+        res.json({ growingMoney });
+    } catch (error) {
+        console.error('Error fetching growing money:', error);
+        res.status(500).json({ message: 'Error fetching growing money' });
     }
 });
 
