@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const http = require('http');
+const WebSocket = require('ws');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -17,6 +20,7 @@ admin.initializeApp({
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Create a new user with renamed fields
 app.post('/api/create-user', async (req, res) => {
@@ -37,6 +41,10 @@ app.post('/api/create-user', async (req, res) => {
         };
         await newUserRef.set(userData);
         res.json({ userId: newUserRef.key });
+
+        // Notify all clients about the new user
+        broadcast('userCreated', { userId: newUserRef.key });
+
     } catch (error) {
         console.error('Error creating user:', error);
         res.status(500).json({ message: 'Error creating user' });
@@ -45,6 +53,19 @@ app.post('/api/create-user', async (req, res) => {
 
 // In-memory cache for user data
 let userCache = {};
+
+// WebSocket server setup
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+// Broadcast function to send messages to all connected clients
+function broadcast(event, data) {
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ event, data }));
+        }
+    });
+}
 
 // Function to calculate and update the growing money based on capital
 async function updateGrowingMoney(userId) {
@@ -72,6 +93,9 @@ async function updateGrowingMoney(userId) {
             growingMoney: newGrowingMoney,
             lastUpdated: currentTime
         });
+
+        // Notify clients about updated growing money
+        broadcast('userUpdated', { userId, growingMoney: newGrowingMoney });
     }
 }
 
@@ -134,7 +158,12 @@ app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     }
 });
 
+// Serve the dashboard
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
 // Start the server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
