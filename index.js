@@ -18,7 +18,7 @@ admin.initializeApp({
 app.use(cors());
 app.use(express.json());
 
-// Create a new user
+// Create a new user with renamed fields
 app.post('/api/create-user', async (req, res) => {
     const { username, email } = req.body;
     try {
@@ -48,44 +48,49 @@ async function updateMainBalance(userId) {
     const snapshot = await userRef.once('value');
     const userData = snapshot.val();
 
-    if (!userData) {
-        throw new Error(`User with ID ${userId} not found`);
+    if (userData) {
+        const { mainBalance, lastUpdated } = userData;
+        const currentTime = Date.now();
+        const elapsedSeconds = (currentTime - lastUpdated) / 1000;
+
+        if (elapsedSeconds > 0) {
+            // Calculate new balance based on 1.44% interest rate per 24 hours
+            const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
+            const newMainBalance = mainBalance * Math.pow(1 + interestRatePerSecond, elapsedSeconds);
+
+            await userRef.update({
+                mainBalance: newMainBalance,
+                lastUpdated: currentTime
+            });
+        }
     }
-
-    const { mainBalance, lastUpdated } = userData;
-    const currentTime = Date.now();
-    const elapsedSeconds = (currentTime - lastUpdated) / 1000;
-
-    if (elapsedSeconds > 0) {
-        // Calculate new balance based on 1.44% interest rate per 24 hours
-        const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
-        const newMainBalance = mainBalance * Math.pow(1 + interestRatePerSecond, elapsedSeconds);
-
-        await userRef.update({
-            mainBalance: newMainBalance,
-            lastUpdated: currentTime
-        });
-
-        return newMainBalance;  // Return the updated balance
-    }
-
-    return mainBalance;  // Return the existing balance if no update was needed
 }
+
+// Schedule the balance update for all users every second
+const updateAllUserBalances = async () => {
+    const usersRef = admin.database().ref('users');
+    const snapshot = await usersRef.once('value');
+    const users = snapshot.val();
+
+    if (users) {
+        for (const userId in users) {
+            await updateMainBalance(userId);
+        }
+    }
+};
+
+// Run the balance update every second
+setInterval(updateAllUserBalances, 1000);
 
 // Fetch the updated main balance
 app.get('/api/earnings/current/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        // Check if user exists
-        const userRef = admin.database().ref(`users/${userId}`);
-        const snapshot = await userRef.once('value');
-        if (!snapshot.exists()) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Update the main balance before fetching it
-        const updatedBalance = await updateMainBalance(userId);
-        res.json({ mainBalance: updatedBalance });
+        await updateMainBalance(userId); // Update the main balance before fetching it
+        
+        const snapshot = await admin.database().ref(`users/${userId}/mainBalance`).once('value');
+        const mainBalance = snapshot.val() || 0;
+        res.json({ mainBalance });
     } catch (error) {
         console.error('Error fetching current balance:', error);
         res.status(500).json({ message: 'Error fetching current balance' });
