@@ -53,6 +53,8 @@ async function updateMainBalance(userId) {
         const currentTime = Date.now();
         const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
+        console.log(`Updating balance for user ${userId}. Elapsed seconds: ${elapsedSeconds}`); // Debugging line
+
         if (elapsedSeconds > 0) {
             // Calculate new balance based on 1.44% interest rate per 24 hours
             const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
@@ -62,6 +64,8 @@ async function updateMainBalance(userId) {
                 mainBalance: newMainBalance,
                 lastUpdated: currentTime
             });
+
+            console.log(`New balance for user ${userId}: ${newMainBalance}`); // Debugging line
         }
     }
 }
@@ -86,7 +90,8 @@ setInterval(updateAllUserBalances, 1000);
 app.get('/api/earnings/current/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        await updateMainBalance(userId); // Update the main balance before fetching it
+        console.log(`Fetching balance for user ${userId}`); // Debugging line
+        await updateMainBalance(userId); // Update balance before fetching it
         
         const snapshot = await admin.database().ref(`users/${userId}/mainBalance`).once('value');
         const mainBalance = snapshot.val() || 0;
