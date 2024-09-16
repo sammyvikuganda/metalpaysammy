@@ -89,29 +89,37 @@ async function calculateGrowingMoney(userId) {
     return growingMoney;
 }
 
-// Fetch the updated capital
-app.get('/api/earnings/capital/:userId', async (req, res) => {
-    const { userId } = req.params;
+// Update user data whenever capital or other relevant fields change
+app.post('/api/update-capital', async (req, res) => {
+    const { userId, newCapital } = req.body;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const user = snapshot.val();
-        const capital = user ? user.capital : 0;
-        res.json({ capital });
-    } catch (error) {
-        console.error('Error fetching current capital:', error);
-        res.status(500).json({ message: 'Error fetching current capital' });
-    }
-});
+        if (!userCache[userId]) {
+            const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+            userCache[userId] = snapshot.val();
+        }
 
-// Fetch the updated growing money
-app.get('/api/earnings/growing-money/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
+        const currentTime = Date.now();
+        const previousData = userCache[userId];
         const growingMoney = await calculateGrowingMoney(userId);
-        res.json({ growingMoney });
+
+        // Update with new capital and recalculate growing money
+        await admin.database().ref(`users/${userId}`).update({
+            capital: newCapital,
+            growingMoney: growingMoney,
+            lastUpdated: currentTime
+        });
+
+        // Update in-memory cache
+        userCache[userId].capital = newCapital;
+        userCache[userId].growingMoney = growingMoney;
+        userCache[userId].lastUpdated = currentTime;
+
+        // Notify clients about the update
+        broadcast('userUpdated', { userId, growingMoney });
+        res.json({ success: true });
     } catch (error) {
-        console.error('Error fetching growing money:', error);
-        res.status(500).json({ message: 'Error fetching growing money' });
+        console.error('Error updating capital:', error);
+        res.status(500).json({ message: 'Error updating capital' });
     }
 });
 
