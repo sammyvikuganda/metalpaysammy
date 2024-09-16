@@ -18,7 +18,7 @@ admin.initializeApp({
 app.use(cors());
 app.use(express.json());
 
-// Create a new user with renamed fields
+// Create a new user
 app.post('/api/create-user', async (req, res) => {
     const { username, email } = req.body;
     try {
@@ -91,8 +91,8 @@ app.get('/api/earnings/current/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         console.log(`Fetching balance for user ${userId}`); // Debugging line
-        await updateMainBalance(userId); // Update balance before fetching it
-        
+        await updateMainBalance(userId); // Update the main balance before fetching it
+
         const snapshot = await admin.database().ref(`users/${userId}/mainBalance`).once('value');
         const mainBalance = snapshot.val() || 0;
         res.json({ mainBalance });
