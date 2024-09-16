@@ -18,7 +18,7 @@ admin.initializeApp({
 app.use(cors());
 app.use(express.json());
 
-// Create a new user
+// Create a new user with renamed fields
 app.post('/api/create-user', async (req, res) => {
     const { username, email } = req.body;
     try {
@@ -26,14 +26,13 @@ app.post('/api/create-user', async (req, res) => {
         const userData = {
             username,
             email,
-            commissionToday: 0,
-            commissionThisWeek: 0,
-            commissionThisMonth: 0,
-            currentCommission: 0,
-            transactionHistory: {
-                Withdraw: [],
-                Deposit: []
-            }
+            earningsToday: 0,
+            earningsThisWeek: 0,
+            earningsThisMonth: 0,
+            currentBalance: 0,
+            mainBalance: 10000, // Set initial main balance to UGX 10,000
+            lastUpdated: Date.now(),
+            transactionHistory: {}
         };
         await newUserRef.set(userData);
         res.json({ userId: newUserRef.key });
@@ -43,9 +42,47 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-// Handle transactions and update commissions
+// Function to calculate and update the main balance
+async function updateMainBalance(userId) {
+    const userRef = admin.database().ref(`users/${userId}`);
+    const snapshot = await userRef.once('value');
+    const userData = snapshot.val();
+
+    if (userData) {
+        const { mainBalance, lastUpdated } = userData;
+        const currentTime = Date.now();
+        const elapsedSeconds = (currentTime - lastUpdated) / 1000;
+
+        if (elapsedSeconds > 0) {
+            // Calculate new balance based on 1.44% interest rate per 24 hours
+            const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
+            const newMainBalance = mainBalance * Math.pow(1 + interestRatePerSecond, elapsedSeconds);
+            await userRef.update({
+                mainBalance: newMainBalance,
+                lastUpdated: currentTime
+            });
+        }
+    }
+}
+
+// Fetch the updated main balance
+app.get('/api/earnings/current/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        await updateMainBalance(userId); // Update the main balance before fetching it
+        
+        const snapshot = await admin.database().ref(`users/${userId}/mainBalance`).once('value');
+        const mainBalance = snapshot.val() || 0;
+        res.json({ mainBalance });
+    } catch (error) {
+        console.error('Error fetching current balance:', error);
+        res.status(500).json({ message: 'Error fetching current balance' });
+    }
+});
+
+// Handle transactions and update earnings
 app.post('/api/transaction', async (req, res) => {
-    const { userId, amount, commissionType, phoneNumber, transactionId } = req.body;
+    const { userId, amount, earningsType, phoneNumber, transactionId } = req.body;
     try {
         const userRef = admin.database().ref(`users/${userId}`);
         const snapshot = await userRef.once('value');
@@ -58,30 +95,33 @@ app.post('/api/transaction', async (req, res) => {
             transactionId: transactionId || ""
         };
 
-        // Update commission values based on commissionType
+        // Update earnings values based on earningsType
         let updateData = {};
-        switch (commissionType) {
-            case 'commissionToday':
-                updateData.commissionToday = (userData.commissionToday || 0) + amount;
+        switch (earningsType) {
+            case 'earningsToday':
+                updateData.earningsToday = (userData.earningsToday || 0) + amount;
                 break;
-            case 'commissionThisWeek':
-                updateData.commissionThisWeek = (userData.commissionThisWeek || 0) + amount;
+            case 'earningsThisWeek':
+                updateData.earningsThisWeek = (userData.earningsThisWeek || 0) + amount;
                 break;
-            case 'commissionThisMonth':
-                updateData.commissionThisMonth = (userData.commissionThisMonth || 0) + amount;
+            case 'earningsThisMonth':
+                updateData.earningsThisMonth = (userData.earningsThisMonth || 0) + amount;
                 break;
-            case 'currentCommission':
-                updateData.currentCommission = (userData.currentCommission || 0) + amount;
+            case 'currentBalance':
+                updateData.currentBalance = (userData.currentBalance || 0) + amount;
+                break;
+            case 'mainBalance':
+                updateData.mainBalance = (userData.mainBalance || 0) + amount;
                 break;
             default:
-                return res.status(400).json({ message: 'Invalid commission type' });
+                return res.status(400).json({ message: 'Invalid earnings type' });
         }
 
         await userRef.update(updateData);
 
         // Add the new transaction to the transaction history
         const transactionsRef = userRef.child('transactionHistory');
-        await transactionsRef.child(commissionType).push(newTransaction);
+        await transactionsRef.push(newTransaction);
 
         res.json({ message: 'Transaction processed successfully' });
     } catch (error) {
@@ -90,55 +130,42 @@ app.post('/api/transaction', async (req, res) => {
     }
 });
 
-// Fetch commission today
-app.get('/api/commission/today/:userId', async (req, res) => {
+// Fetch earnings today
+app.get('/api/earnings/today/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}/commissionToday`).once('value');
-        const commissionToday = snapshot.val() || 0;
-        res.json({ commissionToday });
+        const snapshot = await admin.database().ref(`users/${userId}/earningsToday`).once('value');
+        const earningsToday = snapshot.val() || 0;
+        res.json({ earningsToday });
     } catch (error) {
-        console.error('Error fetching commission today:', error);
-        res.status(500).json({ message: 'Error fetching commission today' });
+        console.error('Error fetching earnings today:', error);
+        res.status(500).json({ message: 'Error fetching earnings today' });
     }
 });
 
-// Fetch commission this week
-app.get('/api/commission/this-week/:userId', async (req, res) => {
+// Fetch earnings this week
+app.get('/api/earnings/this-week/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}/commissionThisWeek`).once('value');
-        const commissionThisWeek = snapshot.val() || 0;
-        res.json({ commissionThisWeek });
+        const snapshot = await admin.database().ref(`users/${userId}/earningsThisWeek`).once('value');
+        const earningsThisWeek = snapshot.val() || 0;
+        res.json({ earningsThisWeek });
     } catch (error) {
-        console.error('Error fetching commission this week:', error);
-        res.status(500).json({ message: 'Error fetching commission this week' });
+        console.error('Error fetching earnings this week:', error);
+        res.status(500).json({ message: 'Error fetching earnings this week' });
     }
 });
 
-// Fetch commission this month
-app.get('/api/commission/this-month/:userId', async (req, res) => {
+// Fetch earnings this month
+app.get('/api/earnings/this-month/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}/commissionThisMonth`).once('value');
-        const commissionThisMonth = snapshot.val() || 0;
-        res.json({ commissionThisMonth });
+        const snapshot = await admin.database().ref(`users/${userId}/earningsThisMonth`).once('value');
+        const earningsThisMonth = snapshot.val() || 0;
+        res.json({ earningsThisMonth });
     } catch (error) {
-        console.error('Error fetching commission this month:', error);
-        res.status(500).json({ message: 'Error fetching commission this month' });
-    }
-});
-
-// Fetch current commission
-app.get('/api/commission/current/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/currentCommission`).once('value');
-        const currentCommission = snapshot.val() || 0;
-        res.json({ currentCommission });
-    } catch (error) {
-        console.error('Error fetching current commission:', error);
-        res.status(500).json({ message: 'Error fetching current commission' });
+        console.error('Error fetching earnings this month:', error);
+        res.status(500).json({ message: 'Error fetching earnings this month' });
     }
 });
 
@@ -154,10 +181,6 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
         res.status(500).json({ message: 'Error fetching transaction history' });
     }
 });
-
-function capitalizeFirstLetter(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-}
 
 // Start the server
 app.listen(PORT, () => {
