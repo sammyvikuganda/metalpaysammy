@@ -68,10 +68,11 @@ async function calculateGrowingMoney(userId) {
 app.post('/api/update-capital', async (req, res) => {
     const { userId, newCapital } = req.body;
     try {
+        // Calculate new growing money
         const newGrowingMoney = await calculateGrowingMoney(userId);
         const currentTime = Date.now();
 
-        // Update the database with new capital and recalculate growing money
+        // Update the database with new capital and growing money
         await admin.database().ref(`users/${userId}`).update({
             capital: newCapital,
             growingMoney: newGrowingMoney,
@@ -128,6 +129,7 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
 app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
+        // Ensure the growing money is updated before fetching
         const newGrowingMoney = await calculateGrowingMoney(userId);
         res.json({ growingMoney: newGrowingMoney });
     } catch (error) {
