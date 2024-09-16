@@ -67,8 +67,8 @@ function broadcast(event, data) {
     });
 }
 
-// Function to calculate and update the growing money based on capital
-async function updateGrowingMoney(userId) {
+// Function to calculate growing money based on capital
+async function calculateGrowingMoney(userId) {
     if (!userCache[userId]) {
         const snapshot = await admin.database().ref(`users/${userId}`).once('value');
         userCache[userId] = snapshot.val();
@@ -79,56 +79,15 @@ async function updateGrowingMoney(userId) {
     const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
     if (elapsedSeconds > 0) {
-        // Calculate new growing money based on 1.44% interest rate per 24 hours
         const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
         const newGrowingMoney = growingMoney + interestEarned;
 
-        // Update the in-memory cache
-        userCache[userId].growingMoney = newGrowingMoney;
-        userCache[userId].lastUpdated = currentTime;
-
-        // Update the database
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
-
-        // Notify clients about updated growing money
-        broadcast('userUpdated', { userId, growingMoney: newGrowingMoney });
+        return newGrowingMoney;
     }
+
+    return growingMoney;
 }
-
-// Batch process to update all users' growing money
-const updateAllGrowingMoney = async () => {
-    const snapshot = await admin.database().ref('users').once('value');
-    const users = snapshot.val();
-
-    if (users) {
-        const updates = {};
-        for (const userId in users) {
-            const user = users[userId];
-            const { capital, growingMoney, lastUpdated } = user;
-            const currentTime = Date.now();
-            const elapsedSeconds = (currentTime - lastUpdated) / 1000;
-
-            if (elapsedSeconds > 0) {
-                const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
-                const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
-                const newGrowingMoney = growingMoney + interestEarned;
-
-                // Prepare batch update
-                updates[`users/${userId}/growingMoney`] = newGrowingMoney;
-                updates[`users/${userId}/lastUpdated`] = currentTime;
-            }
-        }
-        // Perform batch update
-        await admin.database().ref().update(updates);
-    }
-};
-
-// Run the growing money update every 12 hours to reduce reads/writes
-setInterval(updateAllGrowingMoney, 12 * 60 * 60 * 1000); // 12 hours
 
 // Fetch the updated capital
 app.get('/api/earnings/capital/:userId', async (req, res) => {
@@ -148,15 +107,33 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
 app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        await updateGrowingMoney(userId); // Update the growing money before fetching it
-
-        const growingMoney = userCache[userId] ? userCache[userId].growingMoney : 0;
+        const growingMoney = await calculateGrowingMoney(userId);
         res.json({ growingMoney });
     } catch (error) {
         console.error('Error fetching growing money:', error);
         res.status(500).json({ message: 'Error fetching growing money' });
     }
 });
+
+// Batch process to update all users' growing money
+const updateAllGrowingMoney = async () => {
+    const snapshot = await admin.database().ref('users').once('value');
+    const users = snapshot.val();
+
+    if (users) {
+        const updates = {};
+        for (const userId in users) {
+            const user = users[userId];
+            const newGrowingMoney = await calculateGrowingMoney(userId);
+
+            updates[`users/${userId}/growingMoney`] = newGrowingMoney;
+            updates[`users/${userId}/lastUpdated`] = Date.now();
+        }
+        await admin.database().ref().update(updates);
+    }
+};
+
+setInterval(updateAllGrowingMoney, 12 * 60 * 60 * 1000); // 12 hours
 
 // Serve the dashboard
 app.get('/dashboard', (req, res) => {
