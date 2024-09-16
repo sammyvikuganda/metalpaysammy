@@ -52,7 +52,7 @@ async function updateEarnings(userId) {
         userCache[userId] = snapshot.val();
     }
 
-    const { Capital, earnedBalance, lastUpdated } = userCache[userId];
+    const { Capital, earnedBalance, lastUpdated } = userCache[userId] || { Capital: 0, earnedBalance: 0, lastUpdated: Date.now() };
     const currentTime = Date.now();
     const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
@@ -109,7 +109,7 @@ app.get('/api/earnings/current/:userId', async (req, res) => {
     try {
         await updateEarnings(userId); // Update earnings before fetching it
 
-        const { Capital, earnedBalance } = userCache[userId] || { Capital: 0, earnedBalance: 0 };
+        const { Capital = 0, earnedBalance = 0 } = userCache[userId] || { Capital: 0, earnedBalance: 0 };
         res.json({ Capital, earnedBalance });
     } catch (error) {
         console.error('Error fetching current earnings:', error);
