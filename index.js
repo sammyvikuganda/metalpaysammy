@@ -100,8 +100,8 @@ const updateAllUserBalances = async () => {
     }
 };
 
-// Run the balance update every minute to reduce reads/writes
-setInterval(updateAllUserBalances, 60000); // Run every 60 seconds
+// Run the balance update every 12 hours to reduce reads/writes
+setInterval(updateAllUserBalances, 12 * 60 * 60 * 1000); // 12 hours
 
 // Fetch the updated main balance
 app.get('/api/earnings/current/:userId', async (req, res) => {
