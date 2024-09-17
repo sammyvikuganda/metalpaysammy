@@ -59,6 +59,12 @@ async function calculateGrowingMoney(userId) {
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
         const newGrowingMoney = growingMoney + interestEarned;
 
+        // Update the database with the new growing money and last updated time
+        await admin.database().ref(`users/${userId}`).update({
+            growingMoney: newGrowingMoney,
+            lastUpdated: currentTime
+        });
+
         return newGrowingMoney;
     }
 
@@ -109,6 +115,7 @@ cron.schedule('50 12 * * *', async () => {
                 updates[`users/${userId}/lastUpdated`] = Date.now();
             }
             await admin.database().ref().update(updates);
+            console.log('Update successful for all users.');
         }
     } catch (error) {
         console.error('Error updating all users\' growing money:', error);
