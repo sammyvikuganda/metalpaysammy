@@ -19,11 +19,17 @@ admin.initializeApp({
 app.use(cors());
 app.use(express.json());
 
-// Create a new user with renamed fields
+// Create a new user with a specified user ID
 app.post('/api/create-user', async (req, res) => {
-    const { username, email } = req.body;
+    const { userId, username, email } = req.body;
     try {
-        const newUserRef = admin.database().ref('users').push();
+        // Check if userId already exists
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        if (userSnapshot.exists()) {
+            return res.status(400).json({ message: 'User ID already exists' });
+        }
+
+        // Define user data with initial values
         const userData = {
             username,
             email,
@@ -36,8 +42,10 @@ app.post('/api/create-user', async (req, res) => {
             lastUpdated: Date.now(),
             transactionHistory: {}
         };
-        await newUserRef.set(userData);
-        res.json({ userId: newUserRef.key });
+
+        // Set user data with the specified userId
+        await admin.database().ref(`users/${userId}`).set(userData);
+        res.json({ userId });
     } catch (error) {
         console.error('Error creating user:', error);
         res.status(500).json({ message: 'Error creating user' });
