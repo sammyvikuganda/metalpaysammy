@@ -21,7 +21,7 @@ app.use(express.json());
 
 // Create a new user with a specified user ID
 app.post('/api/create-user', async (req, res) => {
-    const { userId, username, email } = req.body;
+    const { userId } = req.body;
     try {
         // Check if userId already exists
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -31,8 +31,6 @@ app.post('/api/create-user', async (req, res) => {
 
         // Define user data with initial values
         const userData = {
-            username,
-            email,
             earningsToday: 0,
             earningsThisWeek: 0,
             earningsThisMonth: 0,
