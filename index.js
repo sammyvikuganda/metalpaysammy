@@ -75,13 +75,13 @@ const updateAllGrowingMoney = async () => {
             updates[`users/${userId}/lastUpdated`] = Date.now();
         }
         await admin.database().ref().update(updates);
-        console.log('Growing money updated for all users at 12:13 PM');
+        console.log('Growing money updated for all users at 12:30 PM');
     }
 };
 
-// Schedule task to run every day at 12:13 PM
-cron.schedule('13 12 * * *', () => {
-    console.log('Running daily growing money update at 12:13 PM');
+// Schedule task to run every day at 12:30 PM
+cron.schedule('30 12 * * *', () => {
+    console.log('Running daily growing money update at 12:30 PM');
     updateAllGrowingMoney();
 });
 
