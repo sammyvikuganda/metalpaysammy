@@ -147,22 +147,29 @@ app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         // Ensure the growing money is updated before fetching
-        const newGrowingMoney = await calculateGrowingMoney(userId);
+        let newGrowingMoney = await calculateGrowingMoney(userId);
 
-        // Update the other server with the new growing money
-        const response = await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ userId: userId, balance: newGrowingMoney })
+        // Fetch current growingMoney from the database
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const { growingMoney: storedGrowingMoney } = snapshot.val();
+
+        // Add the new growing money to the stored growing money
+        const updatedGrowingMoney = storedGrowingMoney + newGrowingMoney;
+
+        // Update the growing money in the database and reset the server's growing money
+        await admin.database().ref(`users/${userId}`).update({
+            growingMoney: updatedGrowingMoney,  // Update growing money in the database
+            lastUpdated: Date.now()             // Update the lastUpdated timestamp
         });
 
-        if (!response.ok) {
-            console.error(`Failed to update balance for user ${userId}`);
-        }
+        // Reset the server's growing money to 0 and start afresh
+        newGrowingMoney = 0;
+        await admin.database().ref(`users/${userId}`).update({
+            growingMoney: newGrowingMoney
+        });
 
-        res.json({ growingMoney: newGrowingMoney });
+        // Send the updated growing money as a response
+        res.json({ growingMoney: updatedGrowingMoney });
     } catch (error) {
         console.error('Error fetching growing money:', error);
         res.status(500).json({ message: 'Error fetching growing money' });
@@ -178,29 +185,25 @@ cron.schedule('*/2 * * * *', async () => {
 
         if (users) {
             for (const userId in users) {
-                const newGrowingMoney = await calculateGrowingMoney(userId);
+                let newGrowingMoney = await calculateGrowingMoney(userId);
 
-                // Update the other server with the new growing money
-                const response = await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ userId: userId, balance: newGrowingMoney })
+                // Fetch current growingMoney from the database
+                const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+                const { growingMoney: storedGrowingMoney } = userSnapshot.val();
+
+                // Add the new growing money to the stored growing money
+                const updatedGrowingMoney = storedGrowingMoney + newGrowingMoney;
+
+                // Update the growing money in the database and reset the server's growing money
+                await admin.database().ref(`users/${userId}`).update({
+                    growingMoney: updatedGrowingMoney,  // Update growing money in the database
+                    lastUpdated: Date.now()             // Update the lastUpdated timestamp
                 });
 
-                if (!response.ok) {
-                    console.error(`Failed to update balance for user ${userId}`);
-                }
-            }
-            console.log('Update successful for all users.');
-        }
-    } catch (error) {
-        console.error('Error fetching and updating growing money:', error);
-    }
-});
+                // Reset the server's growing money to 0
+                newGrowingMoney = 0;
+                await admin.database().ref(`users/${userId}`).update({
+                    growingMoney: newGrowingMoney
+                });
 
-// Start the server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+                // Update the other server with the new growing money
