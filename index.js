@@ -1,11 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const cron = require('node-cron'); // Import node-cron
+const cron = require('node-cron');
+const axios = require('axios'); // Import axios for making HTTP requests
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Firebase Admin SDK
 admin.initializeApp({
     credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
@@ -15,147 +15,62 @@ admin.initializeApp({
     databaseURL: "https://metal-pay-55c31-default-rtdb.firebaseio.com/",
 });
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Create a new user with a specified user ID
-app.post('/api/create-user', async (req, res) => {
-    const { userId } = req.body;
+// Function to send updated balance to another server
+async function sendBalanceUpdate(userId, balance) {
     try {
-        // Check if userId already exists
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        if (userSnapshot.exists()) {
-            return res.status(400).json({ message: 'User ID already exists' });
-        }
-
-        // Define user data with initial values
-        const userData = {
-            earningsToday: 0,
-            earningsThisWeek: 0,
-            earningsThisMonth: 0,
-            currentBalance: 0,
-            capital: 10000, // Set initial capital to UGX 10,000
-            growingMoney: 0, // Initialize growing money
-            lastUpdated: Date.now(),
-            transactionHistory: {}
-        };
-
-        // Set user data with the specified userId
-        await admin.database().ref(`users/${userId}`).set(userData);
-        res.json({ userId });
-    } catch (error) {
-        console.error('Error creating user:', error);
-        res.status(500).json({ message: 'Error creating user' });
-    }
-});
-
-// In-memory cache for user data
-let userCache = {};
-
-// Function to calculate growing money based on the latest capital
-async function calculateGrowingMoney(userId) {
-    const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-    const { capital, growingMoney, lastUpdated } = snapshot.val();
-    const currentTime = Date.now();
-    const elapsedSeconds = (currentTime - lastUpdated) / 1000;
-
-    if (elapsedSeconds > 0) {
-        const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
-        const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
-        const newGrowingMoney = growingMoney + interestEarned;
-
-        // Update the database with the new growing money and last updated time
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
+        const response = await axios.patch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
+            userId: userId,
+            balance: balance
         });
-
-        return newGrowingMoney;
+        console.log(`Balance update for user ${userId} successful:`, response.data);
+    } catch (error) {
+        console.error(`Error sending balance update for user ${userId}:`, error.message);
     }
-
-    return growingMoney;
 }
 
-// Update capital and growing money immediately
-app.post('/api/update-capital', async (req, res) => {
-    const { userId, newCapital } = req.body;
+// Function to fetch grown balance from the current server
+async function fetchAndSendBalance(userId) {
     try {
-        // Calculate new growing money
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        const currentTime = Date.now();
+        // Fetch growing money from the database
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const user = snapshot.val();
 
-        // Update the database with new capital and growing money
-        await admin.database().ref(`users/${userId}`).update({
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
+        if (user) {
+            const growingMoney = user.growingMoney;
 
-        // Update in-memory cache
-        userCache[userId] = {
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        };
-
-        res.json({ success: true });
+            // Send balance update to the other server
+            await sendBalanceUpdate(userId, growingMoney);
+        } else {
+            console.log(`User ${userId} not found`);
+        }
     } catch (error) {
-        console.error('Error updating capital:', error);
-        res.status(500).json({ message: 'Error updating capital' });
+        console.error(`Error fetching balance for user ${userId}:`, error.message);
     }
-});
+}
 
-// Batch process to update all users' growing money daily at 12:50 PM
-cron.schedule('50 12 * * *', async () => {
+// Cron job to run every two minutes
+cron.schedule('*/2 * * * *', async () => {
     try {
-        console.log('Updating growing money for all users...');
+        console.log('Running balance update for all users every 2 minutes...');
         const snapshot = await admin.database().ref('users').once('value');
         const users = snapshot.val();
 
         if (users) {
-            const updates = {};
             for (const userId in users) {
-                const newGrowingMoney = await calculateGrowingMoney(userId);
-                updates[`users/${userId}/growingMoney`] = newGrowingMoney;
-                updates[`users/${userId}/lastUpdated`] = Date.now();
+                // Fetch and send the balance for each user
+                await fetchAndSendBalance(userId);
             }
-            await admin.database().ref().update(updates);
-            console.log('Update successful for all users.');
+        } else {
+            console.log('No users found');
         }
     } catch (error) {
-        console.error('Error updating all users\' growing money:', error);
+        console.error('Error during balance update cron job:', error.message);
     }
 });
 
-// Fetch the updated capital
-app.get('/api/earnings/capital/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const user = snapshot.val();
-        const capital = user ? user.capital : 0;
-        res.json({ capital });
-    } catch (error) {
-        console.error('Error fetching current capital:', error);
-        res.status(500).json({ message: 'Error fetching current capital' });
-    }
-});
-
-// Fetch the updated growing money
-app.get('/api/earnings/growing-money/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        // Ensure the growing money is updated before fetching
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        res.json({ growingMoney: newGrowingMoney });
-    } catch (error) {
-        console.error('Error fetching growing money:', error);
-        res.status(500).json({ message: 'Error fetching growing money' });
-    }
-});
-
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
