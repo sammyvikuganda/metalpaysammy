@@ -63,7 +63,7 @@ async function calculateGrowingMoney(userId) {
     if (elapsedSeconds > 0) {
         const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
-        const newGrowingMoney = growingMoney + interestEarned;
+        const newGrowingMoney = Math.round((growingMoney + interestEarned) * 10) / 10; // Round to 1 decimal place
 
         // Update the database with the new growing money and last updated time
         await admin.database().ref(`users/${userId}`).update({
