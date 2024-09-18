@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const cron = require('node-cron');
-const fetch = require('node-fetch'); // Add this import
+const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -35,8 +35,8 @@ app.post('/api/create-user', async (req, res) => {
             earningsToday: 0,
             earningsThisWeek: 0,
             earningsThisMonth: 0,
-            capital: 10000, // Set initial capital to UGX 10,000
-            growingMoney: 0, // Initialize growing money
+            capital: 10000,
+            growingMoney: 0,
             lastUpdated: Date.now(),
             transactionHistory: {}
         };
@@ -63,13 +63,7 @@ async function calculateGrowingMoney(userId) {
     if (elapsedSeconds > 0) {
         const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
-        const newGrowingMoney = Math.round((growingMoney + interestEarned) * 10) / 10; // Round to 1 decimal place
-
-        // Update the database with the new growing money and last updated time
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
+        const newGrowingMoney = Math.round((growingMoney + interestEarned) * 10) / 10;
 
         return newGrowingMoney;
     }
@@ -81,7 +75,6 @@ async function calculateGrowingMoney(userId) {
 app.post('/api/update-capital', async (req, res) => {
     const { userId, newCapital } = req.body;
     try {
-        // Calculate new growing money
         const newGrowingMoney = await calculateGrowingMoney(userId);
         const currentTime = Date.now();
 
@@ -146,8 +139,7 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
 app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        // Ensure the growing money is updated before fetching
-        let newGrowingMoney = await calculateGrowingMoney(userId);
+        const newGrowingMoney = await calculateGrowingMoney(userId);
 
         // Fetch current growingMoney from the database
         const snapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -156,19 +148,21 @@ app.get('/api/earnings/growing-money/:userId', async (req, res) => {
         // Add the new growing money to the stored growing money
         const updatedGrowingMoney = storedGrowingMoney + newGrowingMoney;
 
-        // Update the growing money in the database and reset the server's growing money
+        // Update the database with the updated growing money
         await admin.database().ref(`users/${userId}`).update({
-            growingMoney: updatedGrowingMoney,  // Update growing money in the database
-            lastUpdated: Date.now()             // Update the lastUpdated timestamp
+            growingMoney: updatedGrowingMoney,
+            lastUpdated: Date.now()
         });
 
-        // Reset the server's growing money to 0 and start afresh
-        newGrowingMoney = 0;
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney
+        // Reset the server's growing money to 0
+        await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ userId: userId, balance: 0 })
         });
 
-        // Send the updated growing money as a response
         res.json({ growingMoney: updatedGrowingMoney });
     } catch (error) {
         console.error('Error fetching growing money:', error);
@@ -185,25 +179,31 @@ cron.schedule('*/2 * * * *', async () => {
 
         if (users) {
             for (const userId in users) {
-                let newGrowingMoney = await calculateGrowingMoney(userId);
+                const newGrowingMoney = await calculateGrowingMoney(userId);
 
-                // Fetch current growingMoney from the database
-                const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-                const { growingMoney: storedGrowingMoney } = userSnapshot.val();
-
-                // Add the new growing money to the stored growing money
-                const updatedGrowingMoney = storedGrowingMoney + newGrowingMoney;
-
-                // Update the growing money in the database and reset the server's growing money
+                // Update the database with the updated growing money
                 await admin.database().ref(`users/${userId}`).update({
-                    growingMoney: updatedGrowingMoney,  // Update growing money in the database
-                    lastUpdated: Date.now()             // Update the lastUpdated timestamp
+                    growingMoney: newGrowingMoney,
+                    lastUpdated: Date.now()
                 });
 
                 // Reset the server's growing money to 0
-                newGrowingMoney = 0;
-                await admin.database().ref(`users/${userId}`).update({
-                    growingMoney: newGrowingMoney
+                await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ userId: userId, balance: 0 })
                 });
+            }
+            console.log('Update successful for all users.');
+        }
+    } catch (error) {
+        console.error('Error fetching and updating growing money:', error);
+    }
+});
 
-                // Update the other server with the new growing money
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
