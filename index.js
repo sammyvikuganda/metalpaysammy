@@ -176,7 +176,10 @@ cron.schedule('*/2 * * * *', async () => {
                 });
 
                 if (!response.ok) {
-                    console.error(`Failed to update balance for user ${userId}`);
+                    const responseBody = await response.text();
+                    console.error(`Failed to update balance for user ${userId}: ${response.status} ${response.statusText} - ${responseBody}`);
+                } else {
+                    console.log(`Successfully updated balance for user ${userId}`);
                 }
             }
             console.log('Update successful for all users.');
