@@ -105,26 +105,26 @@ app.post('/api/update-capital', async (req, res) => {
     }
 });
 
-// Update growing money directly
-app.post('/api/update-growing-money', async (req, res) => {
-    const { userId, newGrowingMoney } = req.body;
+// Reset growing money
+app.post('/api/reset-growing-money', async (req, res) => {
+    const { userId } = req.body;
     try {
-        // Update the database with new growing money and current time
+        // Reset growing money to 0 and update lastUpdated time
         await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney,
+            growingMoney: 0,
             lastUpdated: Date.now()
         });
 
-        // Update in-memory cache if necessary
-        if (userCache[userId]) {
-            userCache[userId].growingMoney = newGrowingMoney;
-            userCache[userId].lastUpdated = Date.now();
-        }
+        // Clear cache
+        userCache[userId] = {
+            growingMoney: 0,
+            lastUpdated: Date.now()
+        };
 
         res.json({ success: true });
     } catch (error) {
-        console.error('Error updating growing money:', error);
-        res.status(500).json({ message: 'Error updating growing money' });
+        console.error('Error resetting growing money:', error);
+        res.status(500).json({ message: 'Error resetting growing money' });
     }
 });
 
