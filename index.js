@@ -65,12 +65,6 @@ async function calculateGrowingMoney(userId) {
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
         const newGrowingMoney = Math.round((growingMoney + interestEarned) * 10) / 10; // Round to 1 decimal place
 
-        // Update the database with the new growing money and last updated time
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
-
         return newGrowingMoney;
     }
 
@@ -146,29 +140,28 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
 app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        // Fetch and calculate the current growing money
+        // Fetch and calculate the current growing money from the server (server-side growing money)
         let newGrowingMoney = await calculateGrowingMoney(userId);
 
-        // Fetch the stored growing money from the database
+        // Fetch the stored growing money from Firebase (this is the accumulated value)
         const snapshot = await admin.database().ref(`users/${userId}`).once('value');
         const { growingMoney: storedGrowingMoney } = snapshot.val();
 
-        // Add the new growing money to the stored growing money
+        // Add the new server-side growing money to the stored growing money in Firebase
         const updatedGrowingMoney = storedGrowingMoney + newGrowingMoney;
 
-        // Update the database with the topped-up growing money
+        // Update Firebase with the topped-up growing money (accumulating)
         await admin.database().ref(`users/${userId}`).update({
             growingMoney: updatedGrowingMoney,
             lastUpdated: Date.now()
         });
 
-        // Reset the growing money in the server to 0
-        newGrowingMoney = 0;
+        // Reset only the server-side growing money (not Firebase)
         await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney
+            lastUpdated: Date.now()
         });
 
-        // Send the updated growing money as the response
+        // Respond with the updated growing money (topped-up value in Firebase)
         res.json({ growingMoney: updatedGrowingMoney });
     } catch (error) {
         console.error('Error fetching growing money:', error);
