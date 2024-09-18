@@ -105,6 +105,31 @@ app.post('/api/update-capital', async (req, res) => {
     }
 });
 
+// Endpoint to update growing money directly
+app.post('/api/update-growing-money', async (req, res) => {
+    const { userId, newGrowingMoney } = req.body;
+    try {
+        const currentTime = Date.now();
+
+        // Update the database with new growing money and last updated time
+        await admin.database().ref(`users/${userId}`).update({
+            growingMoney: newGrowingMoney,
+            lastUpdated: currentTime
+        });
+
+        // Update in-memory cache
+        userCache[userId] = {
+            growingMoney: newGrowingMoney,
+            lastUpdated: currentTime
+        };
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error updating growing money:', error);
+        res.status(500).json({ message: 'Error updating growing money' });
+    }
+});
+
 // Batch process to update all users' growing money daily at 12:50 PM
 cron.schedule('50 12 * * *', async () => {
     try {
