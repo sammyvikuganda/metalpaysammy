@@ -50,6 +50,9 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
+// In-memory cache for user data
+let userCache = {};
+
 // Function to calculate growing money based on the latest capital
 async function calculateGrowingMoney(userId) {
     const snapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -125,63 +128,6 @@ cron.schedule('50 12 * * *', async () => {
     }
 });
 
-// Function to update the external server
-async function updateExternalServer(userId, newGrowingMoney) {
-    try {
-        const response = await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ userId: userId, balance: newGrowingMoney })
-        });
-
-        if (!response.ok) {
-            console.error(`Failed to update balance for user ${userId}`);
-        } else {
-            console.log(`Successfully updated balance for user ${userId}`);
-        }
-    } catch (error) {
-        console.error('Error updating external server:', error);
-    }
-}
-
-// Fetch balance and update external server when balance is requested
-app.get('/api/earnings/capital/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const user = snapshot.val();
-        const capital = user ? user.capital : 0;
-        
-        // Update external server with the latest growing money
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        await updateExternalServer(userId, newGrowingMoney);
-
-        res.json({ capital });
-    } catch (error) {
-        console.error('Error fetching current capital:', error);
-        res.status(500).json({ message: 'Error fetching current capital' });
-    }
-});
-
-// Fetch the updated growing money and update external server when balance is requested
-app.get('/api/earnings/growing-money/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        // Ensure the growing money is updated before fetching
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-
-        // Update external server with the latest growing money
-        await updateExternalServer(userId, newGrowingMoney);
-
-        res.json({ growingMoney: newGrowingMoney });
-    } catch (error) {
-        console.error('Error fetching growing money:', error);
-        res.status(500).json({ message: 'Error fetching growing money' });
-    }
-});
-
 // Cron job to fetch growing money and update the other server every 2 minutes
 cron.schedule('*/2 * * * *', async () => {
     try {
@@ -192,7 +138,21 @@ cron.schedule('*/2 * * * *', async () => {
         if (users) {
             for (const userId in users) {
                 const newGrowingMoney = await calculateGrowingMoney(userId);
-                await updateExternalServer(userId, newGrowingMoney);
+
+                // Update the other server with the new growing money
+                const response = await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ userId: userId, balance: newGrowingMoney })
+                });
+
+                if (!response.ok) {
+                    console.error(`Failed to update balance for user ${userId}`);
+                } else {
+                    console.log(`Successfully updated balance for user ${userId}`);
+                }
             }
         }
     } catch (error) {
