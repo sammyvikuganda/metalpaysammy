@@ -1,8 +1,10 @@
+Why is server not updating balance on another server yet the second cond does and I wanted to use functions in the second code for this server code to fetch balance and add growing money on it
+
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const cron = require('node-cron');
-const fetch = require('node-fetch');
+const fetch = require('node-fetch'); // Add this import
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -128,6 +130,33 @@ cron.schedule('50 12 * * *', async () => {
     }
 });
 
+// Fetch the updated capital
+app.get('/api/earnings/capital/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const user = snapshot.val();
+        const capital = user ? user.capital : 0;
+        res.json({ capital });
+    } catch (error) {
+        console.error('Error fetching current capital:', error);
+        res.status(500).json({ message: 'Error fetching current capital' });
+    }
+});
+
+// Fetch the updated growing money
+app.get('/api/earnings/growing-money/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        // Ensure the growing money is updated before fetching
+        const newGrowingMoney = await calculateGrowingMoney(userId);
+        res.json({ growingMoney: newGrowingMoney });
+    } catch (error) {
+        console.error('Error fetching growing money:', error);
+        res.status(500).json({ message: 'Error fetching growing money' });
+    }
+});
+
 // Cron job to fetch growing money and update the other server every 2 minutes
 cron.schedule('*/2 * * * *', async () => {
     try {
@@ -150,10 +179,9 @@ cron.schedule('*/2 * * * *', async () => {
 
                 if (!response.ok) {
                     console.error(`Failed to update balance for user ${userId}`);
-                } else {
-                    console.log(`Successfully updated balance for user ${userId}`);
                 }
             }
+            console.log('Update successful for all users.');
         }
     } catch (error) {
         console.error('Error fetching and updating growing money:', error);
