@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const cron = require('node-cron');
-const fetch = require('node-fetch'); // Add this import
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -63,7 +62,13 @@ async function calculateGrowingMoney(userId) {
     if (elapsedSeconds > 0) {
         const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
-        const newGrowingMoney = Math.round((growingMoney + interestEarned) * 10) / 10; // Round to 1 decimal place
+        const newGrowingMoney = growingMoney + interestEarned;
+
+        // Update the database with the new growing money and last updated time
+        await admin.database().ref(`users/${userId}`).update({
+            growingMoney: newGrowingMoney,
+            lastUpdated: currentTime
+        });
 
         return newGrowingMoney;
     }
@@ -136,67 +141,16 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
     }
 });
 
-// Fetch the updated growing money, top it up in the database, and reset the growing money on the server
+// Fetch the updated growing money
 app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        // Fetch and calculate the current growing money from the server (server-side growing money)
-        let newGrowingMoney = await calculateGrowingMoney(userId);
-
-        // Fetch the stored growing money from Firebase (this is the accumulated value)
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const { growingMoney: storedGrowingMoney } = snapshot.val();
-
-        // Add the new server-side growing money to the stored growing money in Firebase
-        const updatedGrowingMoney = storedGrowingMoney + newGrowingMoney;
-
-        // Update Firebase with the topped-up growing money (accumulating)
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: updatedGrowingMoney,
-            lastUpdated: Date.now()
-        });
-
-        // Reset only the server-side growing money (not Firebase)
-        await admin.database().ref(`users/${userId}`).update({
-            lastUpdated: Date.now()
-        });
-
-        // Respond with the updated growing money (topped-up value in Firebase)
-        res.json({ growingMoney: updatedGrowingMoney });
+        // Ensure the growing money is updated before fetching
+        const newGrowingMoney = await calculateGrowingMoney(userId);
+        res.json({ growingMoney: newGrowingMoney });
     } catch (error) {
         console.error('Error fetching growing money:', error);
         res.status(500).json({ message: 'Error fetching growing money' });
-    }
-});
-
-// Cron job to fetch growing money and update the other server every 2 minutes
-cron.schedule('*/2 * * * *', async () => {
-    try {
-        console.log('Fetching and updating growing money for all users...');
-        const snapshot = await admin.database().ref('users').once('value');
-        const users = snapshot.val();
-
-        if (users) {
-            for (const userId in users) {
-                const newGrowingMoney = await calculateGrowingMoney(userId);
-
-                // Update the other server with the new growing money
-                const response = await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ userId: userId, balance: newGrowingMoney })
-                });
-
-                if (!response.ok) {
-                    console.error(`Failed to update balance for user ${userId}`);
-                }
-            }
-            console.log('Update successful for all users.');
-        }
-    } catch (error) {
-        console.error('Error fetching and updating growing money:', error);
     }
 });
 
