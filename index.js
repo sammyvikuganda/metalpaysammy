@@ -1,5 +1,3 @@
-Why is server not updating balance on another server yet the second cond does and I wanted to use functions in the second code for this server code to fetch balance and add growing money on it
-
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
