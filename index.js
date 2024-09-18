@@ -105,18 +105,27 @@ app.post('/api/update-capital', async (req, res) => {
     }
 });
 
-// Reset growing money
+// Endpoint to reset growing money to 0
 app.post('/api/reset-growing-money', async (req, res) => {
     const { userId } = req.body;
     try {
-        // Reset growing money to 0 and update lastUpdated time
+        // Fetch current user data to retain the capital and transaction history
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Reset growing money and update lastUpdated
         await admin.database().ref(`users/${userId}`).update({
             growingMoney: 0,
             lastUpdated: Date.now()
         });
 
-        // Clear cache
+        // Update in-memory cache
         userCache[userId] = {
+            capital: userData.capital,
             growingMoney: 0,
             lastUpdated: Date.now()
         };
