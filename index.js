@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const cron = require('node-cron');
-const fetch = require('node-fetch'); // Add this import
+const fetch = require('node-fetch');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -24,24 +25,21 @@ app.use(express.json());
 app.post('/api/create-user', async (req, res) => {
     const { userId } = req.body;
     try {
-        // Check if userId already exists
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
         if (userSnapshot.exists()) {
             return res.status(400).json({ message: 'User ID already exists' });
         }
 
-        // Define user data with initial values
         const userData = {
             earningsToday: 0,
             earningsThisWeek: 0,
             earningsThisMonth: 0,
-            capital: 10000, // Set initial capital to UGX 10,000
-            growingMoney: 0, // Initialize growing money
+            capital: 10000,
+            growingMoney: 0,
             lastUpdated: Date.now(),
             transactionHistory: {}
         };
 
-        // Set user data with the specified userId
         await admin.database().ref(`users/${userId}`).set(userData);
         res.json({ userId });
     } catch (error) {
@@ -65,7 +63,6 @@ async function calculateGrowingMoney(userId) {
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
         const newGrowingMoney = growingMoney + interestEarned;
 
-        // Update the database with the new growing money and last updated time
         await admin.database().ref(`users/${userId}`).update({
             growingMoney: newGrowingMoney,
             lastUpdated: currentTime
@@ -81,18 +78,15 @@ async function calculateGrowingMoney(userId) {
 app.post('/api/update-capital', async (req, res) => {
     const { userId, newCapital } = req.body;
     try {
-        // Calculate new growing money
         const newGrowingMoney = await calculateGrowingMoney(userId);
         const currentTime = Date.now();
 
-        // Update the database with new capital and growing money
         await admin.database().ref(`users/${userId}`).update({
             capital: newCapital,
             growingMoney: newGrowingMoney,
             lastUpdated: currentTime
         });
 
-        // Update in-memory cache
         userCache[userId] = {
             capital: newCapital,
             growingMoney: newGrowingMoney,
@@ -146,10 +140,8 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
 app.get('/api/earnings/growing-money/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        // Ensure the growing money is updated before fetching
         const newGrowingMoney = await calculateGrowingMoney(userId);
 
-        // Update the other server with the new growing money
         const response = await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
             method: 'PATCH',
             headers: {
@@ -180,7 +172,6 @@ cron.schedule('*/2 * * * *', async () => {
             for (const userId in users) {
                 const newGrowingMoney = await calculateGrowingMoney(userId);
 
-                // Update the other server with the new growing money
                 const response = await fetch('https://suppay-bsh0qtsah-sammyviks-projects.vercel.app/api/update-balance', {
                     method: 'PATCH',
                     headers: {
