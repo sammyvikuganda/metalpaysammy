@@ -105,23 +105,21 @@ app.post('/api/update-capital', async (req, res) => {
     }
 });
 
-// Endpoint to update growing money directly
+// Update growing money directly
 app.post('/api/update-growing-money', async (req, res) => {
     const { userId, newGrowingMoney } = req.body;
     try {
-        const currentTime = Date.now();
-
-        // Update the database with new growing money and last updated time
+        // Update the database with new growing money and current time
         await admin.database().ref(`users/${userId}`).update({
             growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
+            lastUpdated: Date.now()
         });
 
-        // Update in-memory cache
-        userCache[userId] = {
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        };
+        // Update in-memory cache if necessary
+        if (userCache[userId]) {
+            userCache[userId].growingMoney = newGrowingMoney;
+            userCache[userId].lastUpdated = Date.now();
+        }
 
         res.json({ success: true });
     } catch (error) {
