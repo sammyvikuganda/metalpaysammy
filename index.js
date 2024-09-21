@@ -46,9 +46,6 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-// In-memory cache for user data
-let userCache = {};
-
 // Function to calculate growing money based on the latest capital
 async function calculateGrowingMoney(userId) {
     const snapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -72,35 +69,10 @@ async function calculateGrowingMoney(userId) {
     return growingMoney;
 }
 
-// Update capital and growing money immediately
-app.post('/api/update-capital', async (req, res) => {
-    const { userId, newCapital } = req.body;
-    try {
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        const currentTime = Date.now();
-
-        await admin.database().ref(`users/${userId}`).update({
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
-
-        userCache[userId] = {
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        };
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error updating capital:', error);
-        res.status(500).json({ message: 'Error updating capital' });
-    }
-});
-
 // Add a new transaction
 app.post('/api/add-transaction', async (req, res) => {
     const { userId, amount, type, description } = req.body;
+    console.log('Received transaction:', { userId, amount, type, description }); // Debugging log
     try {
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
         const userData = userSnapshot.val();
@@ -125,8 +97,8 @@ app.post('/api/add-transaction', async (req, res) => {
 
         res.json({ success: true, transaction: newTransaction });
     } catch (error) {
-        console.error('Error adding transaction:', error);
-        res.status(500).json({ message: 'Error adding transaction' });
+        console.error('Error adding transaction:', error.message || error);
+        res.status(500).json({ message: 'Error adding transaction', error: error.message || error });
     }
 });
 
@@ -143,76 +115,6 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
     }
 });
 
-// Endpoint to reset growing money to 0
-app.post('/api/reset-growing-money', async (req, res) => {
-    const { userId } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const transactionAmount = userData.growingMoney; // Current growing money for the transaction
-        const transactionDescription = 'Reset growing money'; // Description
-
-        // Add the transaction before resetting
-        await addTransaction(userId, transactionAmount, 'debit', transactionDescription);
-
-        // Reset growing money
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: 0,
-            lastUpdated: Date.now()
-        });
-
-        userCache[userId] = {
-            capital: userData.capital,
-            growingMoney: 0,
-            lastUpdated: Date.now()
-        };
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error resetting growing money:', error);
-        res.status(500).json({ message: 'Error resetting growing money' });
-    }
-});
-
-// Helper function to add a transaction
-async function addTransaction(userId, amount, type, description) {
-    const response = await fetch(`https://upay-j4adifkcp-sammyviks-projects.vercel.app/api/add-transaction`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ userId, amount, type, description })
-    });
-    return response.json();
-}
-
-// Batch process to update all users' growing money daily at 12:50 PM
-cron.schedule('50 12 * * *', async () => {
-    try {
-        console.log('Updating growing money for all users...');
-        const snapshot = await admin.database().ref('users').once('value');
-        const users = snapshot.val();
-
-        if (users) {
-            const updates = {};
-            for (const userId in users) {
-                const newGrowingMoney = await calculateGrowingMoney(userId);
-                updates[`users/${userId}/growingMoney`] = newGrowingMoney;
-                updates[`users/${userId}/lastUpdated`] = Date.now();
-            }
-            await admin.database().ref().update(updates);
-            console.log('Update successful for all users.');
-        }
-    } catch (error) {
-        console.error('Error updating all users\' growing money:', error);
-    }
-});
-
 // Fetch the updated capital
 app.get('/api/earnings/capital/:userId', async (req, res) => {
     const { userId } = req.params;
@@ -224,18 +126,6 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
     } catch (error) {
         console.error('Error fetching current capital:', error);
         res.status(500).json({ message: 'Error fetching current capital' });
-    }
-});
-
-// Fetch the updated growing money
-app.get('/api/earnings/growing-money/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        res.json({ growingMoney: newGrowingMoney });
-    } catch (error) {
-        console.error('Error fetching growing money:', error);
-        res.status(500).json({ message: 'Error fetching growing money' });
     }
 });
 
