@@ -29,7 +29,7 @@ app.post('/api/create-user', async (req, res) => {
             return res.status(400).json({ message: 'User ID already exists' });
         }
 
-        // Define user data with initial values
+        // Define user data with initial values including transactionHistory
         const userData = {
             earningsToday: 0,
             earningsThisWeek: 0,
@@ -37,7 +37,7 @@ app.post('/api/create-user', async (req, res) => {
             capital: 10000, // Set initial capital to UGX 10,000
             growingMoney: 0, // Initialize growing money
             lastUpdated: Date.now(),
-            transactionHistory: {}
+            transactionHistory: [] // Initialize transaction history as an empty array
         };
 
         // Set user data with the specified userId
@@ -105,11 +105,57 @@ app.post('/api/update-capital', async (req, res) => {
     }
 });
 
+// Add a new transaction
+app.post('/api/add-transaction', async (req, res) => {
+    const { userId, amount, type, description } = req.body; // Add necessary transaction details
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const newTransaction = {
+            amount,
+            type, // e.g., 'credit' or 'debit'
+            description,
+            date: Date.now()
+        };
+
+        // Update the transaction history
+        userData.transactionHistory.push(newTransaction);
+        
+        await admin.database().ref(`users/${userId}`).update({
+            transactionHistory: userData.transactionHistory,
+            lastUpdated: Date.now()
+        });
+
+        res.json({ success: true, transaction: newTransaction });
+    } catch (error) {
+        console.error('Error adding transaction:', error);
+        res.status(500).json({ message: 'Error adding transaction' });
+    }
+});
+
+// Fetch transaction history
+app.get('/api/transaction-history/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}/transactionHistory`).once('value');
+        const transactionHistory = snapshot.val() || [];
+        res.json({ transactionHistory });
+    } catch (error) {
+        console.error('Error fetching transaction history:', error);
+        res.status(500).json({ message: 'Error fetching transaction history' });
+    }
+});
+
 // Endpoint to reset growing money to 0
 app.post('/api/reset-growing-money', async (req, res) => {
     const { userId } = req.body;
     try {
-        // Fetch current user data to retain the capital and transaction history
+        // Fetch current user data to retain the capital
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
         const userData = userSnapshot.val();
 
