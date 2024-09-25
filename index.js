@@ -70,6 +70,19 @@ app.post('/api/add-referral', async (req, res) => {
     }
 });
 
+// Fetch referral IDs for a user
+app.get('/api/referrals/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}/referrals`).once('value');
+        const referrals = snapshot.val() || [];
+        res.json({ referrals: Object.values(referrals) });
+    } catch (error) {
+        console.error('Error fetching referral IDs:', error);
+        res.status(500).json({ message: 'Error fetching referral IDs' });
+    }
+});
+
 // Add a transaction for a user
 app.post('/api/add-transaction', async (req, res) => {
     const { userId, amount } = req.body;
@@ -238,5 +251,5 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
