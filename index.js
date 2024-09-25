@@ -62,7 +62,7 @@ app.post('/api/add-referral', async (req, res) => {
 
         // Update referral earnings (assuming a fixed amount of earnings per referral for example)
         const referralEarnings = userData.referralEarnings || 0;
-        const newReferralEarnings = referralEarnings + 200; // Adjust this value based on your referral logic
+        const newReferralEarnings = referralEarnings + 100; // Adjust this value based on your referral logic
 
         await admin.database().ref(`users/${userId}`).update({
             referrals: updatedReferrals,
@@ -90,7 +90,7 @@ app.get('/api/referrals/:userId', async (req, res) => {
     }
 });
 
-// Update referral earnings for a user
+// Endpoint to update referral earnings manually
 app.post('/api/update-referral-earnings', async (req, res) => {
     const { userId, newReferralEarnings } = req.body;
     try {
@@ -101,6 +101,7 @@ app.post('/api/update-referral-earnings', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        // Update the referral earnings
         await admin.database().ref(`users/${userId}`).update({
             referralEarnings: newReferralEarnings
         });
@@ -249,10 +250,10 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
         res.json({ capital });
     } catch (error) {
         console.error('Error fetching current capital:', error);
-        res.status(500).json({ message: 'Error fetching current capital' });
+        res.status(500).json({ message: 'Error fetching capital' });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
