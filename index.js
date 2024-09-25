@@ -31,7 +31,6 @@ app.post('/api/create-user', async (req, res) => {
         const userData = {
             capital: 10000,
             growingMoney: 0,
-            referralEarnings: 0, // Initialize referral earnings as 0
             lastUpdated: Date.now(),
             transactionHistory: [], // Initialize transaction history
             referrals: [] // Initialize referrals as an empty array
@@ -45,7 +44,7 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-// Add a referral ID for a user (Update this to calculate referral earnings)
+// Add a referral ID for a user
 app.post('/api/add-referral', async (req, res) => {
     const { userId, referralId } = req.body;
     try {
@@ -60,13 +59,8 @@ app.post('/api/add-referral', async (req, res) => {
         const updatedReferrals = userData.referrals || [];
         updatedReferrals.push(referralId);
 
-        // Update referral earnings (assuming a fixed amount of earnings per referral for example)
-        const referralEarnings = userData.referralEarnings || 0;
-        const newReferralEarnings = referralEarnings + 100; // Adjust this value based on your referral logic
-
         await admin.database().ref(`users/${userId}`).update({
-            referrals: updatedReferrals,
-            referralEarnings: newReferralEarnings
+            referrals: updatedReferrals
         });
 
         res.json({ success: true, message: 'Referral added successfully' });
@@ -76,17 +70,16 @@ app.post('/api/add-referral', async (req, res) => {
     }
 });
 
-// Fetch referral IDs and earnings for a user
+// Fetch referral IDs for a user
 app.get('/api/referrals/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = snapshot.val() || { referrals: [], referralEarnings: 0 };
-        const { referrals, referralEarnings } = userData;
-        res.json({ referrals: Object.values(referrals), referralEarnings });
+        const snapshot = await admin.database().ref(`users/${userId}/referrals`).once('value');
+        const referrals = snapshot.val() || [];
+        res.json({ referrals: Object.values(referrals) });
     } catch (error) {
-        console.error('Error fetching referral data:', error);
-        res.status(500).json({ message: 'Error fetching referral data' });
+        console.error('Error fetching referral IDs:', error);
+        res.status(500).json({ message: 'Error fetching referral IDs' });
     }
 });
 
@@ -248,8 +241,8 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const snapshot = await admin.database().ref(`users/${userId}/transactionHistory`).once('value');
-        const transactions = snapshot.val() || {};
-        res.json(transactions);
+        const transactionHistory = snapshot.val() || [];
+        res.json({ transactionHistory: Object.values(transactionHistory) });
     } catch (error) {
         console.error('Error fetching transaction history:', error);
         res.status(500).json({ message: 'Error fetching transaction history' });
