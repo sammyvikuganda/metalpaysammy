@@ -34,7 +34,7 @@ app.post('/api/create-user', async (req, res) => {
             lastUpdated: Date.now(),
             transactionHistory: [], // Initialize transaction history
             referrals: [], // Initialize referrals as an empty array
-            referralEarnings: 0, // Initialize referral earnings
+            referralEarnings: 0 // Initialize referral earnings
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
@@ -84,44 +84,40 @@ app.get('/api/referrals/:userId', async (req, res) => {
     }
 });
 
-// Fetch referral earnings for a user
-app.get('/api/referral-earnings/:userId', async (req, res) => {
+// Fetch count of active referrals for a user
+app.get('/api/referrals/count/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}/referralEarnings`).once('value');
-        const referralEarnings = snapshot.val() || 0;
-        res.json({ referralEarnings });
+        const snapshot = await admin.database().ref(`users/${userId}/referrals`).once('value');
+        const referrals = snapshot.val() || [];
+        res.json({ activeReferralCount: referrals.length });
     } catch (error) {
-        console.error('Error fetching referral earnings:', error);
-        res.status(500).json({ message: 'Error fetching referral earnings' });
+        console.error('Error fetching referral count:', error);
+        res.status(500).json({ message: 'Error fetching referral count' });
     }
 });
 
 // Update referral earnings for a user
 app.post('/api/update-referral-earnings', async (req, res) => {
-    const { userId, earnings } = req.body;
+    const { userId, amount } = req.body;
     try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const newReferralEarnings = userData.referralEarnings + Number(amount);
+
         await admin.database().ref(`users/${userId}`).update({
-            referralEarnings: earnings
+            referralEarnings: newReferralEarnings
         });
+
         res.json({ success: true, message: 'Referral earnings updated successfully' });
     } catch (error) {
         console.error('Error updating referral earnings:', error);
         res.status(500).json({ message: 'Error updating referral earnings' });
-    }
-});
-
-// Count active referrals for a user
-app.get('/api/count-active-referrals/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/referrals`).once('value');
-        const referrals = snapshot.val() || [];
-        const activeReferralsCount = referrals.length;
-        res.json({ activeReferralsCount });
-    } catch (error) {
-        console.error('Error counting active referrals:', error);
-        res.status(500).json({ message: 'Error counting active referrals' });
     }
 });
 
@@ -248,7 +244,20 @@ cron.schedule('50 12 * * *', async () => {
             console.log('Update successful for all users.');
         }
     } catch (error) {
-        console.error('Error updating growing money for all users:', error);
+        console.error('Error updating all users\' growing money:', error);
+    }
+});
+
+// Fetch the updated capital
+app.get('/api/earnings/capital/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const { capital, growingMoney } = snapshot.val();
+        res.json({ capital, growingMoney });
+    } catch (error) {
+        console.error('Error fetching capital:', error);
+        res.status(500).json({ message: 'Error fetching capital' });
     }
 });
 
