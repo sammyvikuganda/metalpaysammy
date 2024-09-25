@@ -90,7 +90,7 @@ app.get('/api/referrals/:userId', async (req, res) => {
     }
 });
 
-// Endpoint to update referral earnings manually
+// Update referral earnings for a user
 app.post('/api/update-referral-earnings', async (req, res) => {
     const { userId, newReferralEarnings } = req.body;
     try {
@@ -101,9 +101,9 @@ app.post('/api/update-referral-earnings', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Update the referral earnings
         await admin.database().ref(`users/${userId}`).update({
-            referralEarnings: newReferralEarnings
+            referralEarnings: newReferralEarnings,
+            lastUpdated: Date.now() // Update last updated timestamp
         });
 
         res.json({ success: true, message: 'Referral earnings updated successfully' });
@@ -246,14 +246,27 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
     try {
         const snapshot = await admin.database().ref(`users/${userId}`).once('value');
         const user = snapshot.val();
-        const capital = user ? user.capital : 0;
-        res.json({ capital });
+        res.json({ capital: user?.capital || 0 });
     } catch (error) {
-        console.error('Error fetching current capital:', error);
+        console.error('Error fetching capital:', error);
         res.status(500).json({ message: 'Error fetching capital' });
     }
 });
 
+// Fetch user transaction history
+app.get('/api/transactions/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}/transactionHistory`).once('value');
+        const transactions = snapshot.val();
+        res.json({ transactions: transactions ? Object.values(transactions) : [] });
+    } catch (error) {
+        console.error('Error fetching transaction history:', error);
+        res.status(500).json({ message: 'Error fetching transaction history' });
+    }
+});
+
+// Start the server
 app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
