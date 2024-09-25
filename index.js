@@ -90,6 +90,30 @@ app.get('/api/referrals/:userId', async (req, res) => {
     }
 });
 
+// Update referral earnings for a user
+app.post('/api/update-referral-earnings', async (req, res) => {
+    const { userId, newReferralEarnings } = req.body;
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Update referral earnings
+        await admin.database().ref(`users/${userId}`).update({
+            referralEarnings: newReferralEarnings
+        });
+
+        res.json({ success: true, message: 'Referral earnings updated successfully' });
+    } catch (error) {
+        console.error('Error updating referral earnings:', error);
+        res.status(500).json({ message: 'Error updating referral earnings' });
+    }
+});
+
+
 // Add a transaction for a user
 app.post('/api/add-transaction', async (req, res) => {
     const { userId, amount } = req.body;
