@@ -35,9 +35,6 @@ app.post('/api/create-user', async (req, res) => {
             transactionHistory: [], // Initialize transaction history
             referrals: [], // Initialize referrals as an empty array
             referralEarnings: 0, // Initialize referral earnings
-            earningsToday: 0, // Initialize earnings for today
-            earningsThisWeek: 0, // Initialize earnings for the week
-            earningsThisMonth: 0, // Initialize earnings for the month
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
@@ -87,16 +84,44 @@ app.get('/api/referrals/:userId', async (req, res) => {
     }
 });
 
-// Fetch count of active referrals
-app.get('/api/referral-count/:userId', async (req, res) => {
+// Fetch referral earnings for a user
+app.get('/api/referral-earnings/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}/referralEarnings`).once('value');
+        const referralEarnings = snapshot.val() || 0;
+        res.json({ referralEarnings });
+    } catch (error) {
+        console.error('Error fetching referral earnings:', error);
+        res.status(500).json({ message: 'Error fetching referral earnings' });
+    }
+});
+
+// Update referral earnings for a user
+app.post('/api/update-referral-earnings', async (req, res) => {
+    const { userId, earnings } = req.body;
+    try {
+        await admin.database().ref(`users/${userId}`).update({
+            referralEarnings: earnings
+        });
+        res.json({ success: true, message: 'Referral earnings updated successfully' });
+    } catch (error) {
+        console.error('Error updating referral earnings:', error);
+        res.status(500).json({ message: 'Error updating referral earnings' });
+    }
+});
+
+// Count active referrals for a user
+app.get('/api/count-active-referrals/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const snapshot = await admin.database().ref(`users/${userId}/referrals`).once('value');
         const referrals = snapshot.val() || [];
-        res.json({ count: referrals.length });
+        const activeReferralsCount = referrals.length;
+        res.json({ activeReferralsCount });
     } catch (error) {
-        console.error('Error fetching referral count:', error);
-        res.status(500).json({ message: 'Error fetching referral count' });
+        console.error('Error counting active referrals:', error);
+        res.status(500).json({ message: 'Error counting active referrals' });
     }
 });
 
@@ -223,37 +248,11 @@ cron.schedule('50 12 * * *', async () => {
             console.log('Update successful for all users.');
         }
     } catch (error) {
-        console.error('Error updating all users\' growing money:', error);
+        console.error('Error updating growing money for all users:', error);
     }
 });
 
-// Fetch the updated capital
-app.get('/api/earnings/capital/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const user = snapshot.val();
-        const capital = user ? user.capital : 0;
-        res.json({ capital });
-    } catch (error) {
-        console.error('Error fetching current capital:', error);
-        res.status(500).json({ message: 'Error fetching current capital' });
-    }
-});
-
-// Fetch the updated growing money
-app.get('/api/earnings/growing-money/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        res.json({ growingMoney: newGrowingMoney });
-    } catch (error) {
-        console.error('Error fetching growing money:', error);
-        res.status(500).json({ message: 'Error fetching growing money' });
-    }
-});
-
-// Start server
+// Start the server
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
