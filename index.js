@@ -29,13 +29,11 @@ app.post('/api/create-user', async (req, res) => {
         }
 
         const userData = {
-            earningsToday: 0,
-            earningsThisWeek: 0,
-            earningsThisMonth: 0,
             capital: 10000,
             growingMoney: 0,
             lastUpdated: Date.now(),
-            transactionHistory: [] // Initialize transaction history
+            transactionHistory: [], // Initialize transaction history
+            referrals: [] // Initialize referrals as an empty array
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
@@ -43,6 +41,32 @@ app.post('/api/create-user', async (req, res) => {
     } catch (error) {
         console.error('Error creating user:', error);
         res.status(500).json({ message: 'Error creating user' });
+    }
+});
+
+// Add a referral ID for a user
+app.post('/api/add-referral', async (req, res) => {
+    const { userId, referralId } = req.body;
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Add the referral ID to the user's referrals array
+        const updatedReferrals = userData.referrals || [];
+        updatedReferrals.push(referralId);
+
+        await admin.database().ref(`users/${userId}`).update({
+            referrals: updatedReferrals
+        });
+
+        res.json({ success: true, message: 'Referral added successfully' });
+    } catch (error) {
+        console.error('Error adding referral:', error);
+        res.status(500).json({ message: 'Error adding referral' });
     }
 });
 
