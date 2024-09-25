@@ -34,7 +34,10 @@ app.post('/api/create-user', async (req, res) => {
             lastUpdated: Date.now(),
             transactionHistory: [], // Initialize transaction history
             referrals: [], // Initialize referrals as an empty array
-            referralEarnings: 0 // Initialize referral earnings
+            referralEarnings: 0, // Initialize referral earnings
+            earningsToday: 0, // Initialize earnings for today
+            earningsThisWeek: 0, // Initialize earnings for the week
+            earningsThisMonth: 0, // Initialize earnings for the month
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
@@ -84,41 +87,16 @@ app.get('/api/referrals/:userId', async (req, res) => {
     }
 });
 
-// Add referral earnings for a user
-app.post('/api/add-referral-earnings', async (req, res) => {
-    const { userId, earnings } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const newReferralEarnings = (userData.referralEarnings || 0) + Number(earnings);
-
-        await admin.database().ref(`users/${userId}`).update({
-            referralEarnings: newReferralEarnings
-        });
-
-        res.json({ success: true, message: 'Referral earnings added successfully' });
-    } catch (error) {
-        console.error('Error adding referral earnings:', error);
-        res.status(500).json({ message: 'Error adding referral earnings' });
-    }
-});
-
-// Fetch referral earnings for a user
-app.get('/api/referral-earnings/:userId', async (req, res) => {
+// Fetch count of active referrals
+app.get('/api/referral-count/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const user = snapshot.val();
-        const referralEarnings = user ? user.referralEarnings : 0;
-        res.json({ referralEarnings });
+        const snapshot = await admin.database().ref(`users/${userId}/referrals`).once('value');
+        const referrals = snapshot.val() || [];
+        res.json({ count: referrals.length });
     } catch (error) {
-        console.error('Error fetching referral earnings:', error);
-        res.status(500).json({ message: 'Error fetching referral earnings' });
+        console.error('Error fetching referral count:', error);
+        res.status(500).json({ message: 'Error fetching referral count' });
     }
 });
 
@@ -253,16 +231,29 @@ cron.schedule('50 12 * * *', async () => {
 app.get('/api/earnings/capital/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref(`users/${userId}/capital`).once('value');
-        const capital = snapshot.val();
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const user = snapshot.val();
+        const capital = user ? user.capital : 0;
         res.json({ capital });
     } catch (error) {
-        console.error('Error fetching capital:', error);
-        res.status(500).json({ message: 'Error fetching capital' });
+        console.error('Error fetching current capital:', error);
+        res.status(500).json({ message: 'Error fetching current capital' });
     }
 });
 
-// Start the server
+// Fetch the updated growing money
+app.get('/api/earnings/growing-money/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const newGrowingMoney = await calculateGrowingMoney(userId);
+        res.json({ growingMoney: newGrowingMoney });
+    } catch (error) {
+        console.error('Error fetching growing money:', error);
+        res.status(500).json({ message: 'Error fetching growing money' });
+    }
+});
+
+// Start server
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
