@@ -248,12 +248,11 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
         const capital = user ? user.capital : 0;
         res.json({ capital });
     } catch (error) {
-        console.error('Error fetching capital:', error);
-        res.status(500).json({ message: 'Error fetching capital' });
+        console.error('Error fetching current capital:', error);
+        res.status(500).json({ message: 'Error fetching current capital' });
     }
 });
 
-// Start the server
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
