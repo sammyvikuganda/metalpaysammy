@@ -90,28 +90,6 @@ app.get('/api/referrals/:userId', async (req, res) => {
     }
 });
 
-// Update referral earnings for a user
-app.post('/api/update-referral-earnings', async (req, res) => {
-    const { userId, newReferralEarnings } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        await admin.database().ref(`users/${userId}`).update({
-            referralEarnings: newReferralEarnings
-        });
-
-        res.json({ success: true, message: 'Referral earnings updated successfully' });
-    } catch (error) {
-        console.error('Error updating referral earnings:', error);
-        res.status(500).json({ message: 'Error updating referral earnings' });
-    }
-});
-
 // Add a transaction for a user
 app.post('/api/add-transaction', async (req, res) => {
     const { userId, amount } = req.body;
@@ -253,6 +231,32 @@ app.get('/api/earnings/capital/:userId', async (req, res) => {
     }
 });
 
+// Fetch the updated growing money
+app.get('/api/earnings/growing-money/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const newGrowingMoney = await calculateGrowingMoney(userId);
+        res.json({ growingMoney: newGrowingMoney });
+    } catch (error) {
+        console.error('Error fetching growing money:', error);
+        res.status(500).json({ message: 'Error fetching growing money' });
+    }
+});
+
+// Fetch the transaction history for a user
+app.get('/api/transaction-history/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}/transactionHistory`).once('value');
+        const transactions = snapshot.val() || {};
+        res.json(transactions);
+    } catch (error) {
+        console.error('Error fetching transaction history:', error);
+        res.status(500).json({ message: 'Error fetching transaction history' });
+    }
+});
+
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
