@@ -47,7 +47,10 @@ app.post('/api/create-user', async (req, res) => {
 });
 
 
-// Add a referral ID for a user (Update this to calculate referral earnings and bonus)
+
+
+
+        // Add a referral ID for a user (Update this to calculate referral earnings and bonus)
 app.post('/api/add-referral', async (req, res) => {
     const { userId, referralId } = req.body;
     try {
@@ -68,13 +71,13 @@ app.post('/api/add-referral', async (req, res) => {
 
         // Adjust these values based on your referral logic
         const newReferralEarnings = referralEarnings + 200; // For example: 200 UGX per referral
-        const newReferralEarningsBonus = referralEarningsBonus + 200; // For example: 100 UGX bonus per referral
+        const newReferralEarningsBonus = referralEarningsBonus + 200; // For example: 200 UGX bonus per referral
 
         // Update both referralEarnings and referralEarningsBonus in the database
         await admin.database().ref(`users/${userId}`).update({
             referrals: updatedReferrals,
-            referralEarnings: newReferralEarnings,
-            referralEarningsBonus: newReferralEarningsBonus
+            referralEarnings: Number(newReferralEarnings), // Ensure it is a number
+            referralEarningsBonus: Number(newReferralEarningsBonus) // Ensure it is a number
         });
 
         res.json({ success: true, message: 'Referral added successfully and earnings updated' });
@@ -96,8 +99,8 @@ app.get('/api/referrals/:userId', async (req, res) => {
 
         res.json({ 
             referrals: Object.values(referrals), 
-            referralEarnings, 
-            referralEarningsBonus 
+            referralEarnings: Number(referralEarnings), // Ensure it is a number
+            referralEarningsBonus: Number(referralEarningsBonus) // Ensure it is a number
         });
     } catch (error) {
         console.error('Error fetching referral data:', error);
@@ -116,9 +119,15 @@ app.post('/api/update-referral-earnings', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        // Convert newReferralEarnings to a number before updating
+        const earningsValue = Number(newReferralEarnings);
+        if (isNaN(earningsValue)) {
+            return res.status(400).json({ message: 'Invalid earnings value' });
+        }
+
         // Update referral earnings
         await admin.database().ref(`users/${userId}`).update({
-            referralEarnings: newReferralEarnings
+            referralEarnings: earningsValue
         });
 
         res.json({ success: true, message: 'Referral earnings updated successfully' });
@@ -139,9 +148,15 @@ app.post('/api/update-referral-bonus', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        // Convert newReferralEarningsBonus to a number before updating
+        const bonusValue = Number(newReferralEarningsBonus);
+        if (isNaN(bonusValue)) {
+            return res.status(400).json({ message: 'Invalid bonus value' });
+        }
+
         // Update referral earnings bonus
         await admin.database().ref(`users/${userId}`).update({
-            referralEarningsBonus: newReferralEarningsBonus
+            referralEarningsBonus: bonusValue
         });
 
         res.json({ success: true, message: 'Referral earnings bonus updated successfully' });
