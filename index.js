@@ -33,6 +33,8 @@ app.post('/api/create-user', async (req, res) => {
             growingMoney: 0,
             referralEarnings: 0,
             referralEarningsBonus: 0,
+            totalGained: 0,
+            totalInvested: 0,
             lastUpdated: Date.now(),
             transactionHistory: [],
             referrals: []
@@ -163,6 +165,50 @@ app.post('/api/update-referral-bonus', async (req, res) => {
     } catch (error) {
         console.error('Error updating referral bonus:', error);
         res.status(500).json({ message: 'Error updating referral bonus' });
+    }
+});
+
+
+// Update totalGained and totalInvested for a user
+app.post('/api/update-totals', async (req, res) => {
+    const { userId, totalGained, totalInvested } = req.body;
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Update the fields with provided values
+        await admin.database().ref(`users/${userId}`).update({
+            totalGained: totalGained || userData.totalGained,
+            totalInvested: totalInvested || userData.totalInvested
+        });
+
+        res.json({ success: true, message: 'Total fields updated successfully' });
+    } catch (error) {
+        console.error('Error updating total fields:', error);
+        res.status(500).json({ message: 'Error updating total fields' });
+    }
+});
+
+// Fetch totalGained and totalInvested for a user
+app.get('/api/fetch-totals/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const { totalGained, totalInvested } = userData;
+        res.json({ totalGained, totalInvested });
+    } catch (error) {
+        console.error('Error fetching total fields:', error);
+        res.status(500).json({ message: 'Error fetching total fields' });
     }
 });
 
