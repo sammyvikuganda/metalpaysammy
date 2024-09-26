@@ -32,6 +32,7 @@ app.post('/api/create-user', async (req, res) => {
             capital: 10000,
             growingMoney: 0,
             referralEarnings: 0,
+            referralEarningsBonus: 0,
             lastUpdated: Date.now(),
             transactionHistory: [],
             referrals: []
@@ -45,7 +46,8 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-// Add a referral ID for a user (Update this to calculate referral earnings)
+
+// Add a referral ID for a user (Update this to calculate referral earnings and bonus)
 app.post('/api/add-referral', async (req, res) => {
     const { userId, referralId } = req.body;
     try {
@@ -60,16 +62,22 @@ app.post('/api/add-referral', async (req, res) => {
         const updatedReferrals = userData.referrals || [];
         updatedReferrals.push(referralId);
 
-        // Update referral earnings (assuming a fixed amount of earnings per referral for example)
+        // Update referral earnings and referral bonus
         const referralEarnings = userData.referralEarnings || 0;
-        const newReferralEarnings = referralEarnings + 200; // Adjust this value based on your referral logic
+        const referralEarningsBonus = userData.referralEarningsBonus || 0;
 
+        // Adjust these values based on your referral logic
+        const newReferralEarnings = referralEarnings + 200; // For example: 200 UGX per referral
+        const newReferralEarningsBonus = referralEarningsBonus + 200; // For example: 100 UGX bonus per referral
+
+        // Update both referralEarnings and referralEarningsBonus in the database
         await admin.database().ref(`users/${userId}`).update({
             referrals: updatedReferrals,
-            referralEarnings: newReferralEarnings
+            referralEarnings: newReferralEarnings,
+            referralEarningsBonus: newReferralEarningsBonus
         });
 
-        res.json({ success: true, message: 'Referral added successfully' });
+        res.json({ success: true, message: 'Referral added successfully and earnings updated' });
     } catch (error) {
         console.error('Error adding referral:', error);
         res.status(500).json({ message: 'Error adding referral' });
@@ -81,9 +89,16 @@ app.get('/api/referrals/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = snapshot.val() || { referrals: [], referralEarnings: 0 };
-        const { referrals, referralEarnings } = userData;
-        res.json({ referrals: Object.values(referrals), referralEarnings });
+        const userData = snapshot.val() || { referrals: [], referralEarnings: 0, referralEarningsBonus: 0 };
+        
+        // Extract referral data
+        const { referrals, referralEarnings, referralEarningsBonus } = userData;
+
+        res.json({ 
+            referrals: Object.values(referrals), 
+            referralEarnings, 
+            referralEarningsBonus 
+        });
     } catch (error) {
         console.error('Error fetching referral data:', error);
         res.status(500).json({ message: 'Error fetching referral data' });
@@ -112,6 +127,30 @@ app.post('/api/update-referral-earnings', async (req, res) => {
         res.status(500).json({ message: 'Error updating referral earnings' });
     }
 });
+
+// Update referral earnings bonus for a user
+app.post('/api/update-referral-bonus', async (req, res) => {
+    const { userId, newReferralEarningsBonus } = req.body;
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Update referral earnings bonus
+        await admin.database().ref(`users/${userId}`).update({
+            referralEarningsBonus: newReferralEarningsBonus
+        });
+
+        res.json({ success: true, message: 'Referral earnings bonus updated successfully' });
+    } catch (error) {
+        console.error('Error updating referral bonus:', error);
+        res.status(500).json({ message: 'Error updating referral bonus' });
+    }
+});
+
 
 
 // Add a transaction for a user
