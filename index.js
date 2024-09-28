@@ -213,6 +213,19 @@ app.get('/api/fetch-totals/:userId', async (req, res) => {
 });
 
 
+// Add your success message handler here
+app.post('/api/success', async (req, res) => {
+    const successMessage = req.body;
+
+    console.log('Received success message:', successMessage);
+
+    // Handle the success message as needed
+    // For example, you might want to store it in your database
+    // await admin.database().ref(`successMessages`).push(successMessage);
+
+    // Send a response back to the sender
+    res.status(200).json({ status: 'success', message: 'Message received' });
+});
 
 // Add a transaction for a user
 app.post('/api/add-transaction', async (req, res) => {
