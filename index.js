@@ -214,29 +214,13 @@ app.get('/api/fetch-totals/:userId', async (req, res) => {
 
 // Add your success message handler here
 app.post('/api/success', async (req, res) => {
-    const { userId, amount, description, jpesaResponse, log_id, memo, msg, tid, mobile, tx } = req.body;
-
-    if (!userId || !amount || !description || !jpesaResponse || !log_id || !memo || !msg || !tid || !mobile || !tx) {
-        return res.status(400).json({ message: 'All fields are required' });
-    }
-
-    const successMessage = {
-        amount,
-        description,
-        jpesaResponse,
-        log_id,
-        memo,
-        msg,
-        tid,
-        mobile,
-        tx,
-    };
+    const successMessage = req.body;
 
     console.log('Received success message:', successMessage);
 
     try {
-        // Store the success message in the user's specific path
-        await admin.database().ref(`users/${userId}/successMessages`).push(successMessage);
+        // Store the success message in your database
+        await admin.database().ref('successMessages').push(successMessage);
 
         // Send a response back to the sender
         res.status(200).json({ status: 'success', message: 'Message received and saved' });
@@ -246,15 +230,14 @@ app.post('/api/success', async (req, res) => {
     }
 });
 
-// Fetch success messages for a specific user
-app.get('/api/success-messages/:userId', async (req, res) => {
-    const { userId } = req.params;
+// Fetch all success messages
+app.get('/api/success-messages', async (req, res) => {
     try {
-        const snapshot = await admin.database().ref(`users/${userId}/successMessages`).once('value');
+        const snapshot = await admin.database().ref('successMessages').once('value');
         const successMessages = snapshot.val();
 
         if (!successMessages) {
-            return res.status(404).json({ message: 'No success messages found for this user' });
+            return res.status(404).json({ message: 'No success messages found' });
         }
 
         // Convert the messages object into an array
