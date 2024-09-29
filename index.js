@@ -230,6 +230,38 @@ app.post('/api/success', async (req, res) => {
     }
 });
 
+// Fetch all success messages
+app.get('/api/success-messages', async (req, res) => {
+    try {
+        const snapshot = await admin.database().ref('successMessages').once('value');
+        const successMessages = snapshot.val();
+
+        if (!successMessages) {
+            return res.status(404).json({ message: 'No success messages found' });
+        }
+
+        // Convert the messages object into an array
+        const messagesArray = Object.entries(successMessages).map(([id, message]) => ({
+            id,
+            amount: message.amount,
+            description: message.description,
+            api_status: message.jpesaResponse.api_status,
+            log_id: message.log_id,
+            memo: message.memo,
+            msg: message.msg,
+            tid: message.tid,
+            mobile: message.mobile,
+            tx: message.tx
+        }));
+
+        res.json(messagesArray);
+    } catch (error) {
+        console.error('Error fetching success messages:', error);
+        res.status(500).json({ message: 'Error fetching success messages' });
+    }
+});
+
+
 
 // Add a transaction for a user
 app.post('/api/add-transaction', async (req, res) => {
