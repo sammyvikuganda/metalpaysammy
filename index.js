@@ -53,7 +53,7 @@ app.post('/api/create-user', async (req, res) => {
 
 
 
-// Endpoint to receive and store payment order details
+// Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
     const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, creatorId, message } = req.body;
 
@@ -77,14 +77,15 @@ app.post('/api/payment-order', async (req, res) => {
             createdAt: Date.now(),
         };
 
-        // Push the order into Firebase database
-        await admin.database().ref('paymentOrders').push(newOrder);
+        // Push the order into the user's paymentOrders
+        await admin.database().ref(`users/${creatorId}/paymentOrders`).push(newOrder);
         res.status(200).json({ message: 'Payment order saved successfully' });
     } catch (error) {
         console.error('Error saving payment order:', error);
         res.status(500).json({ message: 'Error saving payment order' });
     }
 });
+
 
 // Endpoint to fetch all payment orders
 app.get('/api/payment-orders', async (req, res) => {
