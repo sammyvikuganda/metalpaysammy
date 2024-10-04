@@ -55,9 +55,9 @@ app.post('/api/create-user', async (req, res) => {
 
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId } = req.body;
+    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId } = req.body;
 
-    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId) {
+    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId || !orderSenderId) {
         return res.status(400).json({ message: 'All fields are required' });
     }
 
@@ -75,6 +75,7 @@ app.post('/api/payment-order', async (req, res) => {
             quantity,
             sellerName,
             sellerPhoneNumber,
+            orderSenderId, // Add orderSenderId field
             transactionId,
             messages: [], // Only keep messages as an array
             createdAt: Date.now(), // Server-generated timestamp
@@ -119,6 +120,44 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
     }
 });
 
+// New Endpoint to fetch all payment orders by `orderSenderId`
+app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
+    const { orderSenderId } = req.params;
+    try {
+        const snapshot = await admin.database().ref('users').once('value');
+        const users = snapshot.val();
+        let ordersArray = [];
+
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const filteredOrders = Object.entries(userOrders)
+                    .filter(([_, order]) => order.orderSenderId === orderSenderId)
+                    .map(([id, order]) => {
+                        const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
+                        return {
+                            id,
+                            ...order,
+                            remainingTime,
+                            status: remainingTime <= 0 ? 'Expired' : 'Pending',
+                        };
+                    });
+
+                ordersArray = [...ordersArray, ...filteredOrders];
+            }
+        }
+
+        if (ordersArray.length === 0) {
+            return res.status(404).json({ message: 'No payment orders found for this sender' });
+        }
+
+        res.json(ordersArray);
+    } catch (error) {
+        console.error('Error fetching payment orders by sender:', error);
+        res.status(500).json({ message: 'Error fetching payment orders by sender' });
+    }
+});
+
 // Endpoint to fetch the status of an order by order ID
 app.get('/api/payment-orders/:userId/:id', async (req, res) => {
     const { userId, id } = req.params;
@@ -145,36 +184,6 @@ app.get('/api/payment-orders/:userId/:id', async (req, res) => {
     }
 });
 
-// New Endpoint to fetch all orders by `creatorId`
-app.get('/api/payment-orders/creator/:creatorId', async (req, res) => {
-    const { creatorId } = req.params;
-
-    try {
-        const snapshot = await admin.database().ref('paymentOrders').orderByChild('creatorId').equalTo(creatorId).once('value');
-        const orders = snapshot.val();
-
-        if (!orders) {
-            return res.status(404).json({ message: 'No orders found for this creator' });
-        }
-
-        // Convert the orders object into an array
-        const ordersArray = Object.entries(orders).map(([id, order]) => {
-            const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt); // Calculate remaining time
-            return {
-                id,
-                ...order,
-                remainingTime,
-                status: remainingTime <= 0 ? 'Expired' : 'Pending', // Determine status based on time
-            };
-        });
-
-        res.json(ordersArray);
-    } catch (error) {
-        console.error('Error fetching orders for creator:', error);
-        res.status(500).json({ message: 'Error fetching orders for creator' });
-    }
-});
-
 // Endpoint to send a message to an existing order by transaction ID
 app.post('/api/payment-order/message', async (req, res) => {
     const { transactionId, message } = req.body;
@@ -184,7 +193,6 @@ app.post('/api/payment-order/message', async (req, res) => {
     }
 
     try {
-        // Find the order by transaction ID within the user's paymentOrders
         const ordersSnapshot = await admin.database().ref('users').once('value');
         const users = ordersSnapshot.val();
         let orderFound = false;
@@ -194,13 +202,12 @@ app.post('/api/payment-order/message', async (req, res) => {
             if (userOrders) {
                 const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
                 if (orderId) {
-                    // Update the order by pushing the new message into the messages array
                     await admin.database().ref(`users/${userId}/paymentOrders/${orderId}/messages`).push({
                         text: message,
-                        timestamp: Date.now() // Server-generated timestamp
+                        timestamp: Date.now()
                     });
                     orderFound = true;
-                    break; // Exit loop after finding and updating the order
+                    break;
                 }
             }
         }
@@ -221,7 +228,6 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
     const { transactionId } = req.params;
 
     try {
-        // Find the order by transaction ID within the user's paymentOrders
         const ordersSnapshot = await admin.database().ref('users').once('value');
         const users = ordersSnapshot.val();
         let orderFound = false;
@@ -234,7 +240,7 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
                 if (orderId) {
                     messages = userOrders[orderId].messages || [];
                     orderFound = true;
-                    break; // Exit loop after finding the order
+                    break;
                 }
             }
         }
@@ -250,7 +256,7 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
     }
 });
 
-// Start server
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
