@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const cron = require('node-cron');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -48,20 +47,21 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-
-
-
-
-
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, creatorId, message } = req.body;
+    const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, userId, message } = req.body;
 
-    if (!amount || !price || !quantity || !date || !sellerName || !sellerPhoneNumber || !transactionId || !creatorId) {
+    if (!amount || !price || !quantity || !date || !sellerName || !sellerPhoneNumber || !transactionId || !userId) {
         return res.status(400).json({ message: 'All fields are required' });
     }
 
     try {
+        // Check if user exists
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        if (!userSnapshot.exists()) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
         const newOrder = {
             amount,
             price,
@@ -70,7 +70,6 @@ app.post('/api/payment-order', async (req, res) => {
             sellerName,
             sellerPhoneNumber,
             transactionId,
-            creatorId,
             message, // Initial message field for the order
             messages: [], // Initialize messages as an array
             status: 'Pending',
@@ -78,7 +77,7 @@ app.post('/api/payment-order', async (req, res) => {
         };
 
         // Push the order into the user's paymentOrders
-        await admin.database().ref(`users/${creatorId}/paymentOrders`).push(newOrder);
+        await admin.database().ref(`users/${userId}/paymentOrders`).push(newOrder);
         res.status(200).json({ message: 'Payment order saved successfully' });
     } catch (error) {
         console.error('Error saving payment order:', error);
@@ -86,15 +85,15 @@ app.post('/api/payment-order', async (req, res) => {
     }
 });
 
-
-// Endpoint to fetch all payment orders
-app.get('/api/payment-orders', async (req, res) => {
+// Endpoint to fetch all payment orders for a specific user
+app.get('/api/payment-orders/:userId', async (req, res) => {
+    const { userId } = req.params;
     try {
-        const snapshot = await admin.database().ref('paymentOrders').once('value');
+        const snapshot = await admin.database().ref(`users/${userId}/paymentOrders`).once('value');
         const orders = snapshot.val();
 
         if (!orders) {
-            return res.status(404).json({ message: 'No payment orders found' });
+            return res.status(404).json({ message: 'No payment orders found for this user' });
         }
 
         // Convert the orders object into an array
@@ -112,10 +111,10 @@ app.get('/api/payment-orders', async (req, res) => {
 });
 
 // Endpoint to fetch the status of an order by order ID
-app.get('/api/payment-orders/:id', async (req, res) => {
-    const { id } = req.params;
+app.get('/api/payment-orders/:userId/:id', async (req, res) => {
+    const { userId, id } = req.params;
     try {
-        const orderSnapshot = await admin.database().ref(`paymentOrders/${id}`).once('value');
+        const orderSnapshot = await admin.database().ref(`users/${userId}/paymentOrders/${id}`).once('value');
         const order = orderSnapshot.val();
 
         if (!order) {
@@ -215,386 +214,6 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ message: 'Error fetching messages' });
-    }
-});
-
-
-
-
-        // Add a referral ID for a user (Update this to calculate referral earnings and bonus)
-app.post('/api/add-referral', async (req, res) => {
-    const { userId, referralId } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Add the referral ID to the user's referrals array
-        const updatedReferrals = userData.referrals || [];
-        updatedReferrals.push(referralId);
-
-        // Update referral earnings and referral bonus
-        const referralEarnings = userData.referralEarnings || 0;
-        const referralEarningsBonus = userData.referralEarningsBonus || 0;
-
-        // Adjust these values based on your referral logic
-        const newReferralEarnings = referralEarnings + 200; // For example: 200 UGX per referral
-        const newReferralEarningsBonus = referralEarningsBonus + 200; // For example: 200 UGX bonus per referral
-
-        // Update both referralEarnings and referralEarningsBonus in the database
-        await admin.database().ref(`users/${userId}`).update({
-            referrals: updatedReferrals,
-            referralEarnings: Number(newReferralEarnings), // Ensure it is a number
-            referralEarningsBonus: Number(newReferralEarningsBonus) // Ensure it is a number
-        });
-
-        res.json({ success: true, message: 'Referral added successfully and earnings updated' });
-    } catch (error) {
-        console.error('Error adding referral:', error);
-        res.status(500).json({ message: 'Error adding referral' });
-    }
-});
-
-// Fetch referral IDs and earnings for a user
-app.get('/api/referrals/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = snapshot.val() || { referrals: [], referralEarnings: 0, referralEarningsBonus: 0 };
-        
-        // Extract referral data
-        const { referrals, referralEarnings, referralEarningsBonus } = userData;
-
-        res.json({ 
-            referrals: Object.values(referrals), 
-            referralEarnings: Number(referralEarnings), // Ensure it is a number
-            referralEarningsBonus: Number(referralEarningsBonus) // Ensure it is a number
-        });
-    } catch (error) {
-        console.error('Error fetching referral data:', error);
-        res.status(500).json({ message: 'Error fetching referral data' });
-    }
-});
-
-// Update referral earnings for a user
-app.post('/api/update-referral-earnings', async (req, res) => {
-    const { userId, newReferralEarnings } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Convert newReferralEarnings to a number before updating
-        const earningsValue = Number(newReferralEarnings);
-        if (isNaN(earningsValue)) {
-            return res.status(400).json({ message: 'Invalid earnings value' });
-        }
-
-        // Update referral earnings
-        await admin.database().ref(`users/${userId}`).update({
-            referralEarnings: earningsValue
-        });
-
-        res.json({ success: true, message: 'Referral earnings updated successfully' });
-    } catch (error) {
-        console.error('Error updating referral earnings:', error);
-        res.status(500).json({ message: 'Error updating referral earnings' });
-    }
-});
-
-// Update referral earnings bonus for a user
-app.post('/api/update-referral-bonus', async (req, res) => {
-    const { userId, newReferralEarningsBonus } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Convert newReferralEarningsBonus to a number before updating
-        const bonusValue = Number(newReferralEarningsBonus);
-        if (isNaN(bonusValue)) {
-            return res.status(400).json({ message: 'Invalid bonus value' });
-        }
-
-        // Update referral earnings bonus
-        await admin.database().ref(`users/${userId}`).update({
-            referralEarningsBonus: bonusValue
-        });
-
-        res.json({ success: true, message: 'Referral earnings bonus updated successfully' });
-    } catch (error) {
-        console.error('Error updating referral bonus:', error);
-        res.status(500).json({ message: 'Error updating referral bonus' });
-    }
-});
-
-
-// Update totalGained and totalInvested for a user
-app.post('/api/update-totals', async (req, res) => {
-    const { userId, totalGained, totalInvested } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Update the fields with provided values
-        await admin.database().ref(`users/${userId}`).update({
-            totalGained: totalGained || userData.totalGained,
-            totalInvested: totalInvested || userData.totalInvested
-        });
-
-        res.json({ success: true, message: 'Total fields updated successfully' });
-    } catch (error) {
-        console.error('Error updating total fields:', error);
-        res.status(500).json({ message: 'Error updating total fields' });
-    }
-});
-
-// Fetch totalGained and totalInvested for a user
-app.get('/api/fetch-totals/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const { totalGained, totalInvested } = userData;
-        res.json({ totalGained, totalInvested });
-    } catch (error) {
-        console.error('Error fetching total fields:', error);
-        res.status(500).json({ message: 'Error fetching total fields' });
-    }
-});
-
-// Add your success message handler here
-app.post('/api/success', async (req, res) => {
-    const successMessage = req.body;
-
-    console.log('Received success message:', successMessage);
-
-    try {
-        // Store the success message in your database
-        await admin.database().ref('successMessages').push(successMessage);
-
-        // Send a response back to the sender
-        res.status(200).json({ status: 'success', message: 'Message received and saved' });
-    } catch (error) {
-        console.error('Error saving success message:', error);
-        res.status(500).json({ message: 'Error saving success message' });
-    }
-});
-
-// Fetch all success messages
-app.get('/api/success-messages', async (req, res) => {
-    try {
-        const snapshot = await admin.database().ref('successMessages').once('value');
-        const successMessages = snapshot.val();
-
-        if (!successMessages) {
-            return res.status(404).json({ message: 'No success messages found' });
-        }
-
-        // Convert the messages object into an array
-        const messagesArray = Object.entries(successMessages).map(([id, message]) => ({
-            id,
-            amount: message.amount,
-            description: message.description,
-            api_status: message.jpesaResponse.api_status,
-            log_id: message.log_id,
-            memo: message.memo,
-            msg: message.msg,
-            tid: message.tid,
-            mobile: message.mobile,
-            tx: message.tx
-        }));
-
-        res.json(messagesArray);
-    } catch (error) {
-        console.error('Error fetching success messages:', error);
-        res.status(500).json({ message: 'Error fetching success messages' });
-    }
-});
-
-
-
-// Add a transaction for a user
-app.post('/api/add-transaction', async (req, res) => {
-    const { userId, amount } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const newTransaction = {
-            amount: Number(amount),
-            date: Date.now()
-        };
-
-        await admin.database().ref(`users/${userId}/transactionHistory`).push(newTransaction);
-        res.json({ success: true, message: 'Transaction added successfully' });
-    } catch (error) {
-        console.error('Error adding transaction:', error);
-        res.status(500).json({ message: 'Error adding transaction' });
-    }
-});
-
-// In-memory cache for user data
-let userCache = {};
-
-// Function to calculate growing money based on the latest capital
-async function calculateGrowingMoney(userId) {
-    const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-    const { capital, growingMoney, lastUpdated } = snapshot.val();
-    const currentTime = Date.now();
-    const elapsedSeconds = (currentTime - lastUpdated) / 1000;
-
-    if (elapsedSeconds > 0) {
-        const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
-        const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
-        const newGrowingMoney = growingMoney + interestEarned;
-
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
-
-        return newGrowingMoney;
-    }
-
-    return growingMoney;
-}
-
-// Update capital and growing money immediately
-app.post('/api/update-capital', async (req, res) => {
-    const { userId, newCapital } = req.body;
-    try {
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        const currentTime = Date.now();
-
-        await admin.database().ref(`users/${userId}`).update({
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
-
-        userCache[userId] = {
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        };
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error updating capital:', error);
-        res.status(500).json({ message: 'Error updating capital' });
-    }
-});
-
-// Endpoint to reset growing money to 0
-app.post('/api/reset-growing-money', async (req, res) => {
-    const { userId } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: 0,
-            lastUpdated: Date.now()
-        });
-
-        userCache[userId] = {
-            capital: userData.capital,
-            growingMoney: 0,
-            lastUpdated: Date.now()
-        };
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error resetting growing money:', error);
-        res.status(500).json({ message: 'Error resetting growing money' });
-    }
-});
-
-// Batch process to update all users' growing money daily at 12:50 PM
-cron.schedule('50 12 * * *', async () => {
-    try {
-        console.log('Updating growing money for all users...');
-        const snapshot = await admin.database().ref('users').once('value');
-        const users = snapshot.val();
-
-        if (users) {
-            const updates = {};
-            for (const userId in users) {
-                const newGrowingMoney = await calculateGrowingMoney(userId);
-                updates[`users/${userId}/growingMoney`] = newGrowingMoney;
-                updates[`users/${userId}/lastUpdated`] = Date.now();
-            }
-            await admin.database().ref().update(updates);
-            console.log('Update successful for all users.');
-        }
-    } catch (error) {
-        console.error('Error updating all users\' growing money:', error);
-    }
-});
-
-// Fetch the updated capital
-app.get('/api/earnings/capital/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const user = snapshot.val();
-        const capital = user ? user.capital : 0;
-        res.json({ capital });
-    } catch (error) {
-        console.error('Error fetching current capital:', error);
-        res.status(500).json({ message: 'Error fetching current capital' });
-    }
-});
-
-// Fetch the updated growing money
-app.get('/api/earnings/growing-money/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        res.json({ growingMoney: newGrowingMoney });
-    } catch (error) {
-        console.error('Error fetching growing money:', error);
-        res.status(500).json({ message: 'Error fetching growing money' });
-    }
-});
-
-// Fetch the transaction history for a user
-app.get('/api/transaction-history/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/transactionHistory`).once('value');
-        const transactionHistory = snapshot.val() || [];
-        res.json({ transactionHistory: Object.values(transactionHistory) });
-    } catch (error) {
-        console.error('Error fetching transaction history:', error);
-        res.status(500).json({ message: 'Error fetching transaction history' });
     }
 });
 
