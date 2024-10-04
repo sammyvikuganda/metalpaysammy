@@ -51,6 +51,8 @@ app.post('/api/create-user', async (req, res) => {
 
 
 
+
+
 // Endpoint to receive and store payment order details
 app.post('/api/payment-order', async (req, res) => {
     const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, creatorId, message } = req.body;
@@ -66,11 +68,12 @@ app.post('/api/payment-order', async (req, res) => {
             quantity,
             date,
             sellerName,
-            sellerPhoneNumber, // Seller's phone number field
+            sellerPhoneNumber,
             transactionId,
-            creatorId, // Creator ID field
-            message, // Message field for the order
-            status: 'Pending', // Status of the order
+            creatorId,
+            message, // Initial message field for the order
+            messages: [], // Initialize messages as an array
+            status: 'Pending',
             createdAt: Date.now(),
         };
 
@@ -159,6 +162,60 @@ app.get('/api/payment-orders/creator/:creatorId', async (req, res) => {
     }
 });
 
+// Endpoint to send a message to an existing order by transaction ID
+app.post('/api/payment-order/message', async (req, res) => {
+    const { transactionId, message } = req.body;
+
+    if (!transactionId || !message) {
+        return res.status(400).json({ message: 'Transaction ID and message are required' });
+    }
+
+    try {
+        // Find the order by transaction ID
+        const ordersSnapshot = await admin.database().ref('paymentOrders').orderByChild('transactionId').equalTo(transactionId).once('value');
+        const orders = ordersSnapshot.val();
+
+        if (!orders) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        // Get the first matching order (assuming transaction IDs are unique)
+        const orderId = Object.keys(orders)[0];
+        const orderRef = admin.database().ref(`paymentOrders/${orderId}`);
+
+        // Update the order with the new message
+        await orderRef.child('messages').push({ text: message, timestamp: Date.now() });
+
+        res.status(200).json({ message: 'Message sent successfully' });
+    } catch (error) {
+        console.error('Error sending message:', error);
+        res.status(500).json({ message: 'Error sending message' });
+    }
+});
+
+// Endpoint to fetch messages for a specific order by transaction ID
+app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
+    const { transactionId } = req.params;
+
+    try {
+        // Find the order by transaction ID
+        const ordersSnapshot = await admin.database().ref('paymentOrders').orderByChild('transactionId').equalTo(transactionId).once('value');
+        const orders = ordersSnapshot.val();
+
+        if (!orders) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        // Get the first matching order (assuming transaction IDs are unique)
+        const orderId = Object.keys(orders)[0];
+        const order = orders[orderId];
+
+        res.json({ transactionId, messages: order.messages || [] });
+    } catch (error) {
+        console.error('Error fetching messages:', error);
+        res.status(500).json({ message: 'Error fetching messages' });
+    }
+});
 
 
 
