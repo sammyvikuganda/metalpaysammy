@@ -49,7 +49,7 @@ app.post('/api/create-user', async (req, res) => {
 
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, userId, message } = req.body;
+    const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, userId } = req.body;
 
     if (!amount || !price || !quantity || !date || !sellerName || !sellerPhoneNumber || !transactionId || !userId) {
         return res.status(400).json({ message: 'All fields are required' });
@@ -70,8 +70,7 @@ app.post('/api/payment-order', async (req, res) => {
             sellerName,
             sellerPhoneNumber,
             transactionId,
-            message, // Initial message field for the order
-            messages: [], // Initialize messages as an array
+            messages: [], // Only keep messages as an array
             status: 'Pending',
             createdAt: Date.now(),
         };
@@ -181,7 +180,7 @@ app.post('/api/payment-order/message', async (req, res) => {
             if (userOrders) {
                 const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
                 if (orderId) {
-                    // Update the order with the new message
+                    // Update the order by pushing the new message into the messages array
                     await admin.database().ref(`users/${userId}/paymentOrders/${orderId}/messages`).push({
                         text: message,
                         timestamp: Date.now()
