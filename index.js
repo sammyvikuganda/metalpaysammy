@@ -18,6 +18,12 @@ admin.initializeApp({
 app.use(cors());
 app.use(express.json());
 
+// Function to generate a new transaction ID
+const generateTransactionId = () => {
+    const randomDigits = Math.floor(1000000 + Math.random() * 9000000).toString(); // Generates a random 7-digit number
+    return `NXS${randomDigits}`; // Prepend "NXS" to the random number
+};
+
 // Create a new user with a specified user ID
 app.post('/api/create-user', async (req, res) => {
     const { userId } = req.body;
@@ -49,9 +55,9 @@ app.post('/api/create-user', async (req, res) => {
 
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, userId } = req.body;
+    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId } = req.body;
 
-    if (!amount || !price || !quantity || !date || !sellerName || !sellerPhoneNumber || !transactionId || !userId) {
+    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId) {
         return res.status(400).json({ message: 'All fields are required' });
     }
 
@@ -62,22 +68,21 @@ app.post('/api/payment-order', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        const transactionId = generateTransactionId(); // Generate the transaction ID
         const newOrder = {
             amount,
             price,
             quantity,
-            date,
             sellerName,
             sellerPhoneNumber,
             transactionId,
             messages: [], // Only keep messages as an array
-            status: 'Pending',
-            createdAt: Date.now(),
+            createdAt: Date.now(), // Server-generated timestamp
         };
 
         // Push the order into the user's paymentOrders
         await admin.database().ref(`users/${userId}/paymentOrders`).push(newOrder);
-        res.status(200).json({ message: 'Payment order saved successfully' });
+        res.status(200).json({ message: 'Payment order saved successfully', transactionId });
     } catch (error) {
         console.error('Error saving payment order:', error);
         res.status(500).json({ message: 'Error saving payment order' });
@@ -96,11 +101,16 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
         }
 
         // Convert the orders object into an array
-        const ordersArray = Object.entries(orders).map(([id, order]) => ({
-            id,
-            ...order,
-            remainingTime: 15 * 60 * 1000 - (Date.now() - order.createdAt) // Calculate remaining time
-        }));
+        const ordersArray = Object.entries(orders).map(([id, order]) => {
+            const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt); // Calculate remaining time
+            const isExpired = remainingTime <= 0;
+            return {
+                id,
+                ...order,
+                remainingTime,
+                status: isExpired ? 'Expired' : 'Pending', // Determine status based on time
+            };
+        });
 
         res.json(ordersArray);
     } catch (error) {
@@ -127,7 +137,7 @@ app.get('/api/payment-orders/:userId/:id', async (req, res) => {
             id,
             ...order,
             remainingTime,
-            isExpired,
+            status: isExpired ? 'Expired' : 'Pending', // Determine status based on time
         });
     } catch (error) {
         console.error('Error fetching order status:', error);
@@ -148,11 +158,15 @@ app.get('/api/payment-orders/creator/:creatorId', async (req, res) => {
         }
 
         // Convert the orders object into an array
-        const ordersArray = Object.entries(orders).map(([id, order]) => ({
-            id,
-            ...order,
-            remainingTime: 15 * 60 * 1000 - (Date.now() - order.createdAt) // Calculate remaining time
-        }));
+        const ordersArray = Object.entries(orders).map(([id, order]) => {
+            const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt); // Calculate remaining time
+            return {
+                id,
+                ...order,
+                remainingTime,
+                status: remainingTime <= 0 ? 'Expired' : 'Pending', // Determine status based on time
+            };
+        });
 
         res.json(ordersArray);
     } catch (error) {
@@ -183,7 +197,7 @@ app.post('/api/payment-order/message', async (req, res) => {
                     // Update the order by pushing the new message into the messages array
                     await admin.database().ref(`users/${userId}/paymentOrders/${orderId}/messages`).push({
                         text: message,
-                        timestamp: Date.now()
+                        timestamp: Date.now() // Server-generated timestamp
                     });
                     orderFound = true;
                     break; // Exit loop after finding and updating the order
@@ -229,14 +243,14 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        res.json({ transactionId, messages });
+        res.json({ messages });
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ message: 'Error fetching messages' });
     }
 });
 
-// Start the server
+// Start server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
