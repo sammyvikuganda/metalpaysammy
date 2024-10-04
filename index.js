@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -255,6 +256,53 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
         res.status(500).json({ message: 'Error fetching messages' });
     }
 });
+
+
+
+
+// Endpoint to manually update the status of an order using transaction ID
+app.put('/api/payment-order/status', async (req, res) => {
+    const { transactionId, newStatus } = req.body;
+
+    if (!transactionId || !newStatus) {
+        return res.status(400).json({ message: 'Transaction ID and new status are required' });
+    }
+
+    try {
+        // Fetch all users and orders
+        const usersSnapshot = await admin.database().ref('users').once('value');
+        const users = usersSnapshot.val();
+        let orderFound = false;
+
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    // Update the order status
+                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                        status: newStatus,
+                        lastStatusUpdated: Date.now() // Track the last manual update
+                    });
+
+                    orderFound = true;
+                    res.json({ message: 'Order status updated successfully' });
+                    break;
+                }
+            }
+        }
+
+        if (!orderFound) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+    } catch (error) {
+        console.error('Error updating order status:', error);
+        res.status(500).json({ message: 'Error updating order status' });
+    }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
