@@ -51,6 +51,117 @@ app.post('/api/create-user', async (req, res) => {
 
 
 
+// Endpoint to receive and store payment order details
+app.post('/api/payment-order', async (req, res) => {
+    const { amount, price, quantity, date, sellerName, sellerPhoneNumber, transactionId, creatorId, message } = req.body;
+
+    if (!amount || !price || !quantity || !date || !sellerName || !sellerPhoneNumber || !transactionId || !creatorId) {
+        return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    try {
+        const newOrder = {
+            amount,
+            price,
+            quantity,
+            date,
+            sellerName,
+            sellerPhoneNumber, // Seller's phone number field
+            transactionId,
+            creatorId, // Creator ID field
+            message, // Message field for the order
+            status: 'Pending', // Status of the order
+            createdAt: Date.now(),
+        };
+
+        // Push the order into Firebase database
+        await admin.database().ref('paymentOrders').push(newOrder);
+        res.status(200).json({ message: 'Payment order saved successfully' });
+    } catch (error) {
+        console.error('Error saving payment order:', error);
+        res.status(500).json({ message: 'Error saving payment order' });
+    }
+});
+
+// Endpoint to fetch all payment orders
+app.get('/api/payment-orders', async (req, res) => {
+    try {
+        const snapshot = await admin.database().ref('paymentOrders').once('value');
+        const orders = snapshot.val();
+
+        if (!orders) {
+            return res.status(404).json({ message: 'No payment orders found' });
+        }
+
+        // Convert the orders object into an array
+        const ordersArray = Object.entries(orders).map(([id, order]) => ({
+            id,
+            ...order,
+            remainingTime: 15 * 60 * 1000 - (Date.now() - order.createdAt) // Calculate remaining time
+        }));
+
+        res.json(ordersArray);
+    } catch (error) {
+        console.error('Error fetching payment orders:', error);
+        res.status(500).json({ message: 'Error fetching payment orders' });
+    }
+});
+
+// Endpoint to fetch the status of an order by order ID
+app.get('/api/payment-orders/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const orderSnapshot = await admin.database().ref(`paymentOrders/${id}`).once('value');
+        const order = orderSnapshot.val();
+
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
+        const isExpired = remainingTime <= 0;
+
+        res.json({
+            id,
+            ...order,
+            remainingTime,
+            isExpired,
+        });
+    } catch (error) {
+        console.error('Error fetching order status:', error);
+        res.status(500).json({ message: 'Error fetching order status' });
+    }
+});
+
+// New Endpoint to fetch all orders by `creatorId`
+app.get('/api/payment-orders/creator/:creatorId', async (req, res) => {
+    const { creatorId } = req.params;
+
+    try {
+        const snapshot = await admin.database().ref('paymentOrders').orderByChild('creatorId').equalTo(creatorId).once('value');
+        const orders = snapshot.val();
+
+        if (!orders) {
+            return res.status(404).json({ message: 'No orders found for this creator' });
+        }
+
+        // Convert the orders object into an array
+        const ordersArray = Object.entries(orders).map(([id, order]) => ({
+            id,
+            ...order,
+            remainingTime: 15 * 60 * 1000 - (Date.now() - order.createdAt) // Calculate remaining time
+        }));
+
+        res.json(ordersArray);
+    } catch (error) {
+        console.error('Error fetching orders for creator:', error);
+        res.status(500).json({ message: 'Error fetching orders for creator' });
+    }
+});
+
+
+
+
 
         // Add a referral ID for a user (Update this to calculate referral earnings and bonus)
 app.post('/api/add-referral', async (req, res) => {
