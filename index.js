@@ -171,20 +171,30 @@ app.post('/api/payment-order/message', async (req, res) => {
     }
 
     try {
-        // Find the order by transaction ID
-        const ordersSnapshot = await admin.database().ref('paymentOrders').orderByChild('transactionId').equalTo(transactionId).once('value');
-        const orders = ordersSnapshot.val();
+        // Find the order by transaction ID within the user's paymentOrders
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
 
-        if (!orders) {
-            return res.status(404).json({ message: 'Order not found' });
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    // Update the order with the new message
+                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}/messages`).push({
+                        text: message,
+                        timestamp: Date.now()
+                    });
+                    orderFound = true;
+                    break; // Exit loop after finding and updating the order
+                }
+            }
         }
 
-        // Get the first matching order (assuming transaction IDs are unique)
-        const orderId = Object.keys(orders)[0];
-        const orderRef = admin.database().ref(`paymentOrders/${orderId}`);
-
-        // Update the order with the new message
-        await orderRef.child('messages').push({ text: message, timestamp: Date.now() });
+        if (!orderFound) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
 
         res.status(200).json({ message: 'Message sent successfully' });
     } catch (error) {
@@ -198,19 +208,29 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
     const { transactionId } = req.params;
 
     try {
-        // Find the order by transaction ID
-        const ordersSnapshot = await admin.database().ref('paymentOrders').orderByChild('transactionId').equalTo(transactionId).once('value');
-        const orders = ordersSnapshot.val();
+        // Find the order by transaction ID within the user's paymentOrders
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
+        let messages = [];
 
-        if (!orders) {
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    messages = userOrders[orderId].messages || [];
+                    orderFound = true;
+                    break; // Exit loop after finding the order
+                }
+            }
+        }
+
+        if (!orderFound) {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        // Get the first matching order (assuming transaction IDs are unique)
-        const orderId = Object.keys(orders)[0];
-        const order = orders[orderId];
-
-        res.json({ transactionId, messages: order.messages || [] });
+        res.json({ transactionId, messages });
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ message: 'Error fetching messages' });
