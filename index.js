@@ -139,11 +139,14 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
                     .filter(([_, order]) => order.orderSenderId === orderSenderId)
                     .map(([id, order]) => {
                         const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
+                        const isExpired = remainingTime <= 0;
+                        const autoStatus = isExpired ? 'Expired' : 'Pending';
+
                         return {
                             id,
                             ...order,
                             remainingTime,
-                            status: remainingTime <= 0 ? 'Expired' : 'Pending',
+                            status: order.manualStatus || autoStatus // Prioritize manual status if available
                         };
                     });
 
