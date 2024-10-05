@@ -70,17 +70,18 @@ app.post('/api/payment-order', async (req, res) => {
 
         const transactionId = generateTransactionId(); // Generate the transaction ID
         const newOrder = {
-            amount,
-            price,
-            quantity,
-            sellerName,
-            sellerPhoneNumber,
-            orderSenderId, // Add orderSenderId field
-            transactionId,
-            status: 'Pending', // Set initial status to Pending
-            messages: [], // Only keep messages as an array
-            createdAt: Date.now(), // Server-generated timestamp
-        };
+    amount,
+    price,
+    quantity,
+    sellerName,
+    sellerPhoneNumber,
+    orderSenderId,
+    transactionId,
+    messages: [],
+    createdAt: Date.now(),
+    manualStatus: null // Add manualStatus to orders
+};
+
 
         // Push the order into the user's paymentOrders
         await admin.database().ref(`users/${userId}/paymentOrders`).push(newOrder);
@@ -104,17 +105,17 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
 
         // Convert the orders object into an array
         const ordersArray = Object.entries(orders).map(([id, order]) => {
-            const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt); // Calculate remaining time
-            const isExpired = remainingTime <= 0;
+    const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
+    const isExpired = remainingTime <= 0;
+    const autoStatus = isExpired ? 'Expired' : 'Pending';
 
-            return {
-                id,
-                ...order,
-                remainingTime,
-                // Use the status from the order object instead of calculating based on time
-                status: order.status || (isExpired ? 'Expired' : 'Pending'),
-            };
-        });
+    return {
+        id,
+        ...order,
+        remainingTime,
+        status: order.manualStatus || autoStatus // Prioritize manual status if available
+    };
+});
 
         res.json(ordersArray);
     } catch (error) {
@@ -142,7 +143,7 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
                             id,
                             ...order,
                             remainingTime,
-                            status: order.status || (remainingTime <= 0 ? 'Expired' : 'Pending'),
+                            status: remainingTime <= 0 ? 'Expired' : 'Pending',
                         };
                     });
 
@@ -161,26 +162,43 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
     }
 });
 
-// Endpoint to fetch the status of an order by order ID
-app.get('/api/payment-orders/:userId/:id', async (req, res) => {
-    const { userId, id } = req.params;
-    try {
-        const orderSnapshot = await admin.database().ref(`users/${userId}/paymentOrders/${id}`).once('value');
-        const order = orderSnapshot.val();
 
-        if (!order) {
+// Endpoint to fetch the status of an order by transaction ID
+app.get('/api/payment-orders/transaction/:transactionId', async (req, res) => {
+    const { transactionId } = req.params;
+    try {
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
+        let orderData = {};
+
+        // Iterate through all users and their orders
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    const order = userOrders[orderId];
+                    const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
+                    const isExpired = remainingTime <= 0;
+
+                    orderData = {
+                        transactionId,
+                        ...order,
+                        remainingTime,
+                        status: isExpired ? 'Expired' : 'Pending', // Determine status based on time
+                    };
+                    orderFound = true;
+                    break;
+                }
+            }
+        }
+
+        if (!orderFound) {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
-        const isExpired = remainingTime <= 0;
-
-        res.json({
-            id,
-            ...order,
-            remainingTime,
-            status: order.status || (isExpired ? 'Expired' : 'Pending'), // Use the status from the order object
-        });
+        res.json(orderData);
     } catch (error) {
         console.error('Error fetching order status:', error);
         res.status(500).json({ message: 'Error fetching order status' });
@@ -252,39 +270,57 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        res.json(messages);
+        res.json({ messages });
     } catch (error) {
-        console.error('Error fetching order messages:', error);
-        res.status(500).json({ message: 'Error fetching order messages' });
+        console.error('Error fetching messages:', error);
+        res.status(500).json({ message: 'Error fetching messages' });
     }
 });
 
-// Endpoint to update order status (e.g., mark as completed)
-app.patch('/api/payment-orders/:userId/:id', async (req, res) => {
-    const { userId, id } = req.params;
-    const { status } = req.body;
 
-    if (!status) {
-        return res.status(400).json({ message: 'Status is required' });
+
+// Endpoint to manually update the status of an order
+app.put('/api/payment-order/status/:transactionId', async (req, res) => {
+    const { transactionId } = req.params;
+    const { manualStatus } = req.body;
+
+    if (!manualStatus || !['Completed', 'Canceled'].includes(manualStatus)) {
+        return res.status(400).json({ message: 'Invalid status' });
     }
 
     try {
-        const orderRef = admin.database().ref(`users/${userId}/paymentOrders/${id}`);
-        const orderSnapshot = await orderRef.once('value');
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
 
-        if (!orderSnapshot.exists()) {
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                        manualStatus: manualStatus
+                    });
+                    orderFound = true;
+                    break;
+                }
+            }
+        }
+
+        if (!orderFound) {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        await orderRef.update({ status }); // Update the order status
-        res.json({ message: 'Order status updated successfully' });
+        res.status(200).json({ message: `Order status updated to ${manualStatus}` });
     } catch (error) {
         console.error('Error updating order status:', error);
         res.status(500).json({ message: 'Error updating order status' });
     }
 });
 
-// Start server
+
+
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
