@@ -55,10 +55,10 @@ app.post('/api/create-user', async (req, res) => {
 
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId } = req.body;
+    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId, orderNotice } = req.body;
 
     if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId || !orderSenderId) {
-        return res.status(400).json({ message: 'All fields are required' });
+        return res.status(400).json({ message: 'All fields except orderNotice are required' });
     }
 
     try {
@@ -70,18 +70,19 @@ app.post('/api/payment-order', async (req, res) => {
 
         const transactionId = generateTransactionId(); // Generate the transaction ID
         const newOrder = {
-    amount,
-    price,
-    quantity,
-    sellerName,
-    sellerPhoneNumber,
-    orderSenderId,
-    transactionId,
-    messages: [],
-    createdAt: Date.now(),
-    manualStatus: null // Add manualStatus to orders
-};
-
+            amount,
+            price,
+            quantity,
+            sellerName,
+            sellerPhoneNumber,
+            orderSenderId,
+            transactionId,
+            messages: [],
+            createdAt: Date.now(),
+            manualStatus: null, // Add manualStatus to orders
+            orderNotice: orderNotice || null, // Add orderNotice if provided
+            noticeUpdatedAt: null // Field for tracking when orderNotice was last updated
+        };
 
         // Push the order into the user's paymentOrders
         await admin.database().ref(`users/${userId}/paymentOrders`).push(newOrder);
@@ -91,6 +92,7 @@ app.post('/api/payment-order', async (req, res) => {
         res.status(500).json({ message: 'Error saving payment order' });
     }
 });
+
 
 // Endpoint to fetch all payment orders for a specific user
 app.get('/api/payment-orders/:userId', async (req, res) => {
@@ -105,17 +107,19 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
 
         // Convert the orders object into an array
         const ordersArray = Object.entries(orders).map(([id, order]) => {
-    const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
-    const isExpired = remainingTime <= 0;
-    const autoStatus = isExpired ? 'Expired' : 'Pending';
+            const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
+            const isExpired = remainingTime <= 0;
+            const autoStatus = isExpired ? 'Expired' : 'Pending';
 
-    return {
-        id,
-        ...order,
-        remainingTime,
-        status: order.manualStatus || autoStatus // Prioritize manual status if available
-    };
-});
+            return {
+                id,
+                ...order,
+                remainingTime,
+                status: order.manualStatus || autoStatus, // Prioritize manual status if available
+                orderNotice: order.orderNotice || null, // Include order notice
+                noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
+            };
+        });
 
         res.json(ordersArray);
     } catch (error) {
@@ -123,6 +127,7 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
         res.status(500).json({ message: 'Error fetching payment orders' });
     }
 });
+
 
 // New Endpoint to fetch all payment orders by `orderSenderId`
 app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
@@ -146,7 +151,9 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
                             id,
                             ...order,
                             remainingTime,
-                            status: order.manualStatus || autoStatus // Prioritize manual status if available
+                            status: order.manualStatus || autoStatus, // Prioritize manual status if available
+                            orderNotice: order.orderNotice || null, // Include order notice
+                            noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
                         };
                     });
 
@@ -320,6 +327,48 @@ app.put('/api/payment-order/status/:transactionId', async (req, res) => {
         res.status(500).json({ message: 'Error updating order status' });
     }
 });
+
+
+// Endpoint to update the order notice for a specific order
+app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
+    const { transactionId } = req.params;
+    const { orderNotice } = req.body;
+
+    if (!orderNotice) {
+        return res.status(400).json({ message: 'Order notice is required' });
+    }
+
+    try {
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
+
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                        orderNotice,
+                        noticeUpdatedAt: Date.now() // Update the timestamp for when the notice was updated
+                    });
+                    orderFound = true;
+                    break;
+                }
+            }
+        }
+
+        if (!orderFound) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        res.status(200).json({ message: 'Order notice updated successfully' });
+    } catch (error) {
+        console.error('Error updating order notice:', error);
+        res.status(500).json({ message: 'Error updating order notice' });
+    }
+});
+
 
 
 
