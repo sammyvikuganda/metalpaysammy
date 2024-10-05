@@ -79,7 +79,6 @@ app.post('/api/payment-order', async (req, res) => {
             transactionId,
             messages: [], // Only keep messages as an array
             createdAt: Date.now(), // Server-generated timestamp
-            manualStatus: null // Initialize manual status
         };
 
         // Push the order into the user's paymentOrders
@@ -110,7 +109,7 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
                 id,
                 ...order,
                 remainingTime,
-                status: order.manualStatus || (isExpired ? 'Expired' : 'Pending'), // Use manualStatus if available
+                status: isExpired ? 'Expired' : 'Pending', // Determine status based on time
             };
         });
 
@@ -140,7 +139,7 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
                             id,
                             ...order,
                             remainingTime,
-                            status: order.manualStatus || (remainingTime <= 0 ? 'Expired' : 'Pending'),
+                            status: remainingTime <= 0 ? 'Expired' : 'Pending',
                         };
                     });
 
@@ -177,7 +176,7 @@ app.get('/api/payment-orders/:userId/:id', async (req, res) => {
             id,
             ...order,
             remainingTime,
-            status: order.manualStatus || (isExpired ? 'Expired' : 'Pending'), // Use manualStatus if available
+            status: isExpired ? 'Expired' : 'Pending', // Determine status based on time
         });
     } catch (error) {
         console.error('Error fetching order status:', error);
@@ -250,33 +249,51 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        res.json(messages);
+        res.json({ messages });
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ message: 'Error fetching messages' });
     }
 });
 
-// New endpoint to manually update the status of an order by order ID
-app.patch('/api/payment-order/:userId/:id', async (req, res) => {
-    const { userId, id } = req.params;
-    const { status } = req.body;
+// Endpoint to update the status of an order by transaction ID
+app.patch('/api/payment-orders/status/:transactionId', async (req, res) => {
+    const { transactionId } = req.params;
+    const { status } = req.body; // Expecting a new status in the request body
 
     if (!status) {
         return res.status(400).json({ message: 'Status is required' });
     }
 
     try {
-        const orderRef = admin.database().ref(`users/${userId}/paymentOrders/${id}`);
-        const orderSnapshot = await orderRef.once('value');
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
 
-        if (!orderSnapshot.exists()) {
-            return res.status(404).json({ message: 'Order not found' });
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    // Update the status of the found order
+                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({ status });
+                    orderFound = true;
+
+                    // Retrieve the updated order details to return
+                    const updatedOrder = await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).once('value');
+                    return res.json({
+                        message: 'Order status updated successfully',
+                        id: orderId,
+                        ...updatedOrder.val(),
+                        status, // Return the updated status
+                    });
+                }
+            }
         }
 
-        // Update the manualStatus of the order
-        await orderRef.update({ manualStatus: status });
-        res.json({ message: 'Order status updated successfully' });
+        if (!orderFound) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
     } catch (error) {
         console.error('Error updating order status:', error);
         res.status(500).json({ message: 'Error updating order status' });
