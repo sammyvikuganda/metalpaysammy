@@ -367,7 +367,7 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                         // If the update count reaches 2, update the status to Completed
                         if (currentUpdateCount + 1 >= 2) {
                             await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                                manualStatus: 'Received'
+                                manualStatus: 'Completed'
                             });
                         }
                     }
