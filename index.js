@@ -392,6 +392,43 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
 
 
 
+
+// Endpoint to fetch notice update count for a specific order by transaction ID
+app.get('/api/payment-order/notice-count/:transactionId', async (req, res) => {
+    const { transactionId } = req.params;
+
+    try {
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
+        let noticeUpdateCount = 0;
+
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    const order = userOrders[orderId];
+                    noticeUpdateCount = order.noticeUpdateCount || 0;
+                    orderFound = true;
+                    break;
+                }
+            }
+        }
+
+        if (!orderFound) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        res.status(200).json({ transactionId, noticeUpdateCount });
+    } catch (error) {
+        console.error('Error fetching notice update count:', error);
+        res.status(500).json({ message: 'Error fetching notice update count' });
+    }
+});
+
+
+
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
