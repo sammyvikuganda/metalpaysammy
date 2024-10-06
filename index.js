@@ -81,7 +81,8 @@ app.post('/api/payment-order', async (req, res) => {
             createdAt: Date.now(),
             manualStatus: null, // Add manualStatus to orders
             orderNotice: orderNotice || null, // Add orderNotice if provided
-            noticeUpdatedAt: null // Field for tracking when orderNotice was last updated
+            noticeUpdatedAt: null, // Field for tracking when orderNotice was last updated
+            noticeUpdateCount: 0 // Count how many times the notice has been updated
         };
 
         // Push the order into the user's paymentOrders
@@ -92,7 +93,6 @@ app.post('/api/payment-order', async (req, res) => {
         res.status(500).json({ message: 'Error saving payment order' });
     }
 });
-
 
 // Endpoint to fetch all payment orders for a specific user
 app.get('/api/payment-orders/:userId', async (req, res) => {
@@ -127,7 +127,6 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
         res.status(500).json({ message: 'Error fetching payment orders' });
     }
 });
-
 
 // New Endpoint to fetch all payment orders by `orderSenderId`
 app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
@@ -171,7 +170,6 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
         res.status(500).json({ message: 'Error fetching payment orders by sender' });
     }
 });
-
 
 // Endpoint to fetch the status of an order by transaction ID
 app.get('/api/payment-orders/transaction/:transactionId', async (req, res) => {
@@ -254,81 +252,6 @@ app.post('/api/payment-order/message', async (req, res) => {
     }
 });
 
-// Endpoint to fetch messages for a specific order by transaction ID
-app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
-    const { transactionId } = req.params;
-
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-        let messages = [];
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    messages = userOrders[orderId].messages || [];
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.json({ messages });
-    } catch (error) {
-        console.error('Error fetching messages:', error);
-        res.status(500).json({ message: 'Error fetching messages' });
-    }
-});
-
-
-
-// Endpoint to manually update the status of an order
-app.put('/api/payment-order/status/:transactionId', async (req, res) => {
-    const { transactionId } = req.params;
-    const { manualStatus } = req.body;
-
-    if (!manualStatus || !['Completed', 'Canceled'].includes(manualStatus)) {
-        return res.status(400).json({ message: 'Invalid status' });
-    }
-
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                        manualStatus: manualStatus
-                    });
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.status(200).json({ message: `Order status updated to ${manualStatus}` });
-    } catch (error) {
-        console.error('Error updating order status:', error);
-        res.status(500).json({ message: 'Error updating order status' });
-    }
-});
-
-
 // Endpoint to update the order notice for a specific order
 app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
     const { transactionId } = req.params;
@@ -348,10 +271,32 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
             if (userOrders) {
                 const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
                 if (orderId) {
+                    const order = userOrders[orderId];
+
+                    // Update the order notice
                     await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
                         orderNotice,
                         noticeUpdatedAt: Date.now() // Update the timestamp for when the notice was updated
                     });
+
+                    // Check if the order notice was updated to "Confirmed"
+                    if (orderNotice === 'Confirmed') {
+                        if (order.orderNotice === 'Releasing') {
+                            // Increment the notice update counter
+                            const currentUpdateCount = order.noticeUpdateCount || 0;
+                            await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                                noticeUpdateCount: currentUpdateCount + 1 // Increment the counter
+                            });
+
+                            // If the update count reaches 2, update status to Completed
+                            if (currentUpdateCount + 1 >= 2) {
+                                await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                                    manualStatus: 'Completed'
+                                });
+                            }
+                        }
+                    }
+
                     orderFound = true;
                     break;
                 }
@@ -368,9 +313,6 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
         res.status(500).json({ message: 'Error updating order notice' });
     }
 });
-
-
-
 
 // Start the server
 app.listen(PORT, () => {
