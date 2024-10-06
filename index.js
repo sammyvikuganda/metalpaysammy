@@ -358,7 +358,7 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                     });
 
                     // Increment the notice update counter only for specific orderNotice values
-                    if (['Confirmed', 'Received'].includes(orderNotice)) {
+                    if (['Confirmed', 'Completed'].includes(orderNotice)) {
                         const currentUpdateCount = order.noticeUpdateCount || 0;
                         await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
                             noticeUpdateCount: currentUpdateCount + 1 // Increment the counter
@@ -367,7 +367,7 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                         // If the update count reaches 2, update the status to Completed
                         if (currentUpdateCount + 1 >= 2) {
                             await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                                manualStatus: 'Completed'
+                                manualStatus: 'Received'
                             });
                         }
                     }
