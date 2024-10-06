@@ -357,15 +357,14 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                         noticeUpdatedAt: Date.now() // Update the timestamp for when the notice was updated
                     });
 
-                    // Check if the order notice was updated to "Confirmed"
-                    if (orderNotice === 'Confirmed') {
-                        // Increment the notice update counter
+                    // Increment the notice update counter only for specific orderNotice values
+                    if (['Confirmed', 'Received'].includes(orderNotice)) {
                         const currentUpdateCount = order.noticeUpdateCount || 0;
                         await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
                             noticeUpdateCount: currentUpdateCount + 1 // Increment the counter
                         });
 
-                        // If the update count reaches 2, update status to Completed
+                        // If the update count reaches 2, update the status to Completed
                         if (currentUpdateCount + 1 >= 2) {
                             await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
                                 manualStatus: 'Completed'
@@ -389,7 +388,6 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
         res.status(500).json({ message: 'Error updating order notice' });
     }
 });
-
 
 
 
