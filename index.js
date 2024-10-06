@@ -295,7 +295,7 @@ app.put('/api/payment-order/status/:transactionId', async (req, res) => {
     const { transactionId } = req.params;
     const { manualStatus } = req.body;
 
-    if (!manualStatus || !['Received', 'Canceled'].includes(manualStatus)) {
+    if (!manualStatus || !['Completed', 'Canceled'].includes(manualStatus)) {
         return res.status(400).json({ message: 'Invalid status' });
     }
 
@@ -367,7 +367,7 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                         // If the update count reaches 2, update the status to Completed
                         if (currentUpdateCount + 1 >= 2) {
                             await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                                manualStatus: 'Received'
+                                manualStatus: 'Completed'
                             });
                         }
                     }
