@@ -295,7 +295,7 @@ app.put('/api/payment-order/status/:transactionId', async (req, res) => {
     const { transactionId } = req.params;
     const { manualStatus } = req.body;
 
-    if (!manualStatus || !['Completed', 'Canceled'].includes(manualStatus)) {
+    if (!manualStatus || !['Received', 'Canceled'].includes(manualStatus)) {
         return res.status(400).json({ message: 'Invalid status' });
     }
 
