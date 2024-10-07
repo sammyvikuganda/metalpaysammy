@@ -218,10 +218,10 @@ app.get('/api/payment-orders/transaction/:transactionId', async (req, res) => {
 
 // Endpoint to send a message to an existing order by transaction ID
 app.post('/api/payment-order/message', async (req, res) => {
-    const { transactionId, message } = req.body;
+    const { transactionId, message, sender } = req.body; // Add 'sender'
 
-    if (!transactionId || !message) {
-        return res.status(400).json({ message: 'Transaction ID and message are required' });
+    if (!transactionId || !message || sender === undefined) { // Check if sender is provided
+        return res.status(400).json({ message: 'Transaction ID, message, and sender are required' });
     }
 
     try {
@@ -236,6 +236,7 @@ app.post('/api/payment-order/message', async (req, res) => {
                 if (orderId) {
                     await admin.database().ref(`users/${userId}/paymentOrders/${orderId}/messages`).push({
                         text: message,
+                        sender: sender, // Add the sender field to the message
                         timestamp: Date.now()
                     });
                     orderFound = true;
@@ -254,6 +255,7 @@ app.post('/api/payment-order/message', async (req, res) => {
         res.status(500).json({ message: 'Error sending message' });
     }
 });
+
 
 // Endpoint to fetch messages for a specific order by transaction ID
 app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
@@ -287,7 +289,6 @@ app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
         res.status(500).json({ message: 'Error fetching messages' });
     }
 });
-
 
 
 // Endpoint to manually update the status of an order
