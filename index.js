@@ -352,21 +352,24 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                 if (orderId) {
                     const order = userOrders[orderId];
 
-                    // Check if this is the first update of the order notice
-                    const isFirstUpdate = order.noticeUpdatedAt === null;
+                    // Check if it's the first time updating the order notice
+                    if (order.noticeUpdateCount === 0) {
+                        // Set new createdAt and reset remainingTime (15 minutes from now)
+                        const newCreatedAt = Date.now();
+                        const remainingTime = 15 * 60 * 1000; // 15 minutes in milliseconds
 
-                    // Update the order notice
-                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                        orderNotice: orderNotice,
-                        noticeUpdatedAt: Date.now(),
-                        noticeUpdateCount: order.noticeUpdateCount + 1 // Increment the notice update count
-                    });
-
-                    // Extend the expiration time by 15 minutes only if it's the first update
-                    if (isFirstUpdate) {
-                        const newExpirationTime = order.createdAt + 15 * 60 * 1000; // 15 minutes in milliseconds
                         await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                            createdAt: newExpirationTime // Update createdAt to the new expiration time
+                            createdAt: newCreatedAt,  // Update the createdAt field
+                            remainingTime: remainingTime,  // Reset remaining time to 15 minutes
+                            noticeUpdatedAt: Date.now(),  // Track the time when notice is updated
+                            noticeUpdateCount: order.noticeUpdateCount + 1,  // Increment the update count
+                            orderNotice: orderNotice  // Update the order notice
+                        });
+                    } else {
+                        // If it's not the first time, only update the notice and noticeUpdatedAt fields
+                        await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                            noticeUpdatedAt: Date.now(),  // Update the noticeUpdatedAt field
+                            orderNotice: orderNotice  // Update the order notice
                         });
                     }
 
@@ -386,7 +389,6 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
         res.status(500).json({ message: 'Error updating order notice' });
     }
 });
-
 
 
 
