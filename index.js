@@ -352,25 +352,22 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                 if (orderId) {
                     const order = userOrders[orderId];
 
+                    // Check if this is the first update of the order notice
+                    const isFirstUpdate = order.noticeUpdatedAt === null;
+
                     // Update the order notice
                     await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                        orderNotice,
-                        noticeUpdatedAt: Date.now() // Update the timestamp for when the notice was updated
+                        orderNotice: orderNotice,
+                        noticeUpdatedAt: Date.now(),
+                        noticeUpdateCount: order.noticeUpdateCount + 1 // Increment the notice update count
                     });
 
-                    // Increment the notice update counter only for specific orderNotice values
-                    if (['Confirmed', 'Completed'].includes(orderNotice)) {
-                        const currentUpdateCount = order.noticeUpdateCount || 0;
+                    // Extend the expiration time by 15 minutes only if it's the first update
+                    if (isFirstUpdate) {
+                        const newExpirationTime = order.createdAt + 15 * 60 * 1000; // 15 minutes in milliseconds
                         await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                            noticeUpdateCount: currentUpdateCount + 1 // Increment the counter
+                            createdAt: newExpirationTime // Update createdAt to the new expiration time
                         });
-
-                        // If the update count reaches 2, update the status to Completed
-                        if (currentUpdateCount + 1 >= 2) {
-                            await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                                manualStatus: 'Completed'
-                            });
-                        }
                     }
 
                     orderFound = true;
@@ -389,6 +386,7 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
         res.status(500).json({ message: 'Error updating order notice' });
     }
 });
+
 
 
 
