@@ -352,24 +352,30 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                 if (orderId) {
                     const order = userOrders[orderId];
 
-                    // Check if it's the first time updating the order notice
-                    if (order.noticeUpdateCount === 0) {
-                        // Set new createdAt and reset remainingTime (15 minutes from now)
-                        const newCreatedAt = Date.now();
-                        const remainingTime = 15 * 60 * 1000; // 15 minutes in milliseconds
+                    // Check if it's the first update
+                    const isFirstUpdate = order.noticeUpdatedAt === null;
 
+                    // Update the order notice and related fields
+                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                        orderNotice,
+                        noticeUpdatedAt: Date.now(), // Update the timestamp for when the notice was updated
+                        noticeUpdateCount: (order.noticeUpdateCount || 0) + 1 // Increment the counter
+                    });
+
+                    // Increment the notice update counter only for specific orderNotice values
+                    if (['Confirmed', 'Completed'].includes(orderNotice)) {
+                        // If the update count reaches 2, update the status to Completed
+                        if (order.noticeUpdateCount + 1 >= 2) {
+                            await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                                manualStatus: 'Completed'
+                            });
+                        }
+                    }
+
+                    // Update createdAt only if this is the first update
+                    if (isFirstUpdate) {
                         await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                            createdAt: newCreatedAt,  // Update the createdAt field
-                            remainingTime: remainingTime,  // Reset remaining time to 15 minutes
-                            noticeUpdatedAt: Date.now(),  // Track the time when notice is updated
-                            noticeUpdateCount: order.noticeUpdateCount + 1,  // Increment the update count
-                            orderNotice: orderNotice  // Update the order notice
-                        });
-                    } else {
-                        // If it's not the first time, only update the notice and noticeUpdatedAt fields
-                        await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                            noticeUpdatedAt: Date.now(),  // Update the noticeUpdatedAt field
-                            orderNotice: orderNotice  // Update the order notice
+                            createdAt: Date.now() // Update createdAt only on the first update
                         });
                     }
 
