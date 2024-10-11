@@ -42,7 +42,8 @@ app.post('/api/create-user', async (req, res) => {
             totalInvested: 0,
             lastUpdated: Date.now(),
             transactionHistory: [],
-            referrals: []
+            referrals: [],
+            adverts: {}  // Initialize an empty object for adverts
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
@@ -53,398 +54,156 @@ app.post('/api/create-user', async (req, res) => {
     }
 });
 
-// Endpoint to receive and store payment order details under the specific user
-app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId, orderNotice } = req.body;
+// Create a new advert with updated fields
+app.post('/api/adverts', async (req, res) => {
+    const { 
+        advertiserNotice, 
+        price, 
+        airtelNumber, 
+        mtnNumber, 
+        chipperTag, 
+        bankAccountNumber, 
+        userId, // This acts as both the advert owner and title
+        minAmount, 
+        maxAmount, 
+        availableQuantity, 
+        timeLimit 
+    } = req.body;
 
-    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId || !orderSenderId) {
-        return res.status(400).json({ message: 'All fields except orderNotice are required' });
+    // Ensure all required fields are provided
+    if (!advertiserNotice || !price || !userId || !minAmount || !maxAmount || !availableQuantity || !timeLimit) {
+        return res.status(400).json({ message: 'All fields are required' });
     }
 
     try {
-        // Check if user exists
+        const advertId = generateTransactionId(); // Generate a unique ID for the advert
+
+        const newAdvert = {
+            advertOwner: userId, // This acts as the title
+            advertiserNotice, // Advertiser notice field
+            price,
+            paymentMethods: {
+                airtelNumber, 
+                mtnNumber, 
+                chipperTag, 
+                bankAccountNumber 
+            },
+            limits: {
+                minAmount, 
+                maxAmount 
+            },
+            availableQuantity, 
+            timeLimit: timeLimit || 30, 
+            advertStatus: 'Active' 
+        };
+
+        // Save the new advert under the user's adverts
+        await admin.database().ref(`users/${userId}/adverts/${advertId}`).set(newAdvert);
+        res.status(200).json({ message: 'Advert created successfully', advertId });
+    } catch (error) {
+        console.error('Error creating advert:', error);
+        res.status(500).json({ message: 'Error creating advert' });
+    }
+});
+
+// Fetch all adverts for a user
+app.get('/api/:userId/adverts', async (req, res) => {
+    const { userId } = req.params;
+    
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}/adverts`).once('value');
+        if (!userSnapshot.exists()) {
+            return res.status(404).json({ message: 'No adverts found for this user' });
+        }
+
+        const adverts = userSnapshot.val();
+        res.json({ adverts });
+    } catch (error) {
+        console.error('Error fetching adverts:', error);
+        res.status(500).json({ message: 'Error fetching adverts' });
+    }
+});
+
+// Update advert details
+app.put('/api/adverts/:userId/:advertId', async (req, res) => {
+    const { userId, advertId } = req.params;
+    const { 
+        advertiserNotice, 
+        price, 
+        airtelNumber, 
+        mtnNumber, 
+        chipperTag, 
+        bankAccountNumber, 
+        minAmount, 
+        maxAmount, 
+        availableQuantity, 
+        timeLimit, 
+        advertStatus 
+    } = req.body;
+
+    // Ensure all required fields are provided
+    if (!advertiserNotice || !price || !minAmount || !maxAmount || !availableQuantity || !timeLimit || !advertStatus) {
+        return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    try {
+        const updatedAdvert = {
+            advertOwner: userId, // This acts as the title
+            advertiserNotice, // Advertiser notice field
+            price,
+            paymentMethods: {
+                airtelNumber, 
+                mtnNumber, 
+                chipperTag, 
+                bankAccountNumber 
+            },
+            limits: {
+                minAmount,
+                maxAmount
+            },
+            availableQuantity,
+            timeLimit, 
+            advertStatus, 
+            updatedAt: Date.now() // Update timestamp
+        };
+
+        // Update the advert in the user's advert collection
+        await admin.database().ref(`users/${userId}/adverts/${advertId}`).update(updatedAdvert);
+        res.status(200).json({ message: 'Advert updated successfully' });
+    } catch (error) {
+        console.error('Error updating advert:', error);
+        res.status(500).json({ message: 'Error updating advert' });
+    }
+});
+
+// Delete an advert for a user
+app.delete('/api/:userId/adverts/:advertId', async (req, res) => {
+    const { userId, advertId } = req.params;
+
+    try {
+        // Check if the user exists
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
         if (!userSnapshot.exists()) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const transactionId = generateTransactionId(); // Generate the transaction ID
-        const newOrder = {
-            amount,
-            price,
-            quantity,
-            sellerName,
-            sellerPhoneNumber,
-            orderSenderId,
-            transactionId,
-            messages: [],
-            createdAt: Date.now(),
-            manualStatus: null, // Add manualStatus to orders
-            orderNotice: orderNotice || null, // Add orderNotice if provided
-            noticeUpdatedAt: null, // Field for tracking when orderNotice was last updated
-            noticeUpdateCount: 0 // Count how many times the notice has been updated
-        };
+        // Check if the advert exists for the user
+        const advertSnapshot = await admin.database().ref(`users/${userId}/adverts/${advertId}`).once('value');
+        if (!advertSnapshot.exists()) {
+            return res.status(404).json({ message: 'Advert not found' });
+        }
 
-        // Push the order into the user's paymentOrders
-        await admin.database().ref(`users/${userId}/paymentOrders`).push(newOrder);
-        res.status(200).json({ message: 'Payment order saved successfully', transactionId });
+        // Delete the advert
+        await admin.database().ref(`users/${userId}/adverts/${advertId}`).remove();
+
+        res.json({ message: 'Advert deleted successfully' });
     } catch (error) {
-        console.error('Error saving payment order:', error);
-        res.status(500).json({ message: 'Error saving payment order' });
+        console.error('Error deleting advert:', error);
+        res.status(500).json({ message: 'Error deleting advert' });
     }
 });
-
-
-// Endpoint to fetch all payment orders for a specific user
-app.get('/api/payment-orders/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}/paymentOrders`).once('value');
-        const orders = snapshot.val();
-
-        if (!orders) {
-            return res.status(404).json({ message: 'No payment orders found for this user' });
-        }
-
-        // Convert the orders object into an array
-        const ordersArray = Object.entries(orders).map(([id, order]) => {
-            const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
-            const isExpired = remainingTime <= 0;
-            const autoStatus = isExpired ? 'Expired' : 'Pending';
-
-            return {
-                id,
-                ...order,
-                remainingTime,
-                status: order.manualStatus || autoStatus, // Prioritize manual status if available
-                orderNotice: order.orderNotice || null, // Include order notice
-                noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
-            };
-        });
-
-        res.json(ordersArray);
-    } catch (error) {
-        console.error('Error fetching payment orders:', error);
-        res.status(500).json({ message: 'Error fetching payment orders' });
-    }
-});
-
-
-// New Endpoint to fetch all payment orders by `orderSenderId`
-app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
-    const { orderSenderId } = req.params;
-    try {
-        const snapshot = await admin.database().ref('users').once('value');
-        const users = snapshot.val();
-        let ordersArray = [];
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const filteredOrders = Object.entries(userOrders)
-                    .filter(([_, order]) => order.orderSenderId === orderSenderId)
-                    .map(([id, order]) => {
-                        const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
-                        const isExpired = remainingTime <= 0;
-                        const autoStatus = isExpired ? 'Expired' : 'Pending';
-
-                        return {
-                            id,
-                            ...order,
-                            remainingTime,
-                            status: order.manualStatus || autoStatus, // Prioritize manual status if available
-                            orderNotice: order.orderNotice || null, // Include order notice
-                            noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
-                        };
-                    });
-
-                ordersArray = [...ordersArray, ...filteredOrders];
-            }
-        }
-
-        if (ordersArray.length === 0) {
-            return res.status(404).json({ message: 'No payment orders found for this sender' });
-        }
-
-        res.json(ordersArray);
-    } catch (error) {
-        console.error('Error fetching payment orders by sender:', error);
-        res.status(500).json({ message: 'Error fetching payment orders by sender' });
-    }
-});
-
-
-// Endpoint to fetch the status of an order by transaction ID
-app.get('/api/payment-orders/transaction/:transactionId', async (req, res) => {
-    const { transactionId } = req.params;
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-        let orderData = {};
-
-        // Iterate through all users and their orders
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    const order = userOrders[orderId];
-                    const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
-                    const isExpired = remainingTime <= 0;
-
-                    orderData = {
-                        transactionId,
-                        ...order,
-                        remainingTime,
-                        status: isExpired ? 'Expired' : 'Pending', // Determine status based on time
-                    };
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.json(orderData);
-    } catch (error) {
-        console.error('Error fetching order status:', error);
-        res.status(500).json({ message: 'Error fetching order status' });
-    }
-});
-
-// Endpoint to send a message to an existing order by transaction ID
-app.post('/api/payment-order/message', async (req, res) => {
-    const { transactionId, message, sender } = req.body; // Add 'sender'
-
-    if (!transactionId || !message || sender === undefined) { // Check if sender is provided
-        return res.status(400).json({ message: 'Transaction ID, message, and sender are required' });
-    }
-
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}/messages`).push({
-                        text: message,
-                        sender: sender, // Add the sender field to the message
-                        timestamp: Date.now()
-                    });
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.status(200).json({ message: 'Message sent successfully' });
-    } catch (error) {
-        console.error('Error sending message:', error);
-        res.status(500).json({ message: 'Error sending message' });
-    }
-});
-
-
-// Endpoint to fetch messages for a specific order by transaction ID
-app.get('/api/payment-order/messages/:transactionId', async (req, res) => {
-    const { transactionId } = req.params;
-
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-        let messages = [];
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    messages = userOrders[orderId].messages || [];
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.json({ messages });
-    } catch (error) {
-        console.error('Error fetching messages:', error);
-        res.status(500).json({ message: 'Error fetching messages' });
-    }
-});
-
-
-// Endpoint to manually update the status of an order
-app.put('/api/payment-order/status/:transactionId', async (req, res) => {
-    const { transactionId } = req.params;
-    const { manualStatus } = req.body;
-
-    if (!manualStatus || !['Completed', 'Canceled'].includes(manualStatus)) {
-        return res.status(400).json({ message: 'Invalid status' });
-    }
-
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                        manualStatus: manualStatus
-                    });
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.status(200).json({ message: `Order status updated to ${manualStatus}` });
-    } catch (error) {
-        console.error('Error updating order status:', error);
-        res.status(500).json({ message: 'Error updating order status' });
-    }
-});
-
-
-// Endpoint to update the order notice for a specific order
-app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
-    const { transactionId } = req.params;
-    const { orderNotice } = req.body;
-
-    if (!orderNotice) {
-        return res.status(400).json({ message: 'Order notice is required' });
-    }
-
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    const order = userOrders[orderId];
-
-                    // Check if it's the first update
-                    const isFirstUpdate = !order.noticeUpdatedAt;
-
-                    // Get the current time for updates
-                    const currentTime = Date.now();
-
-                    // If it's the first update, extend the expiration time and reset remainingTime
-                    if (isFirstUpdate) {
-                        const newExpirationTime = currentTime + 15 * 60 * 1000; // Add 15 minutes
-                        const updatedRemainingTime = 15 * 60 * 1000; // 15 minutes in milliseconds
-
-                        await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                            createdAt: currentTime, // Set the new creation time as the current time
-                            remainingTime: updatedRemainingTime, // Reset the remaining time
-                            expirationTime: newExpirationTime // Extend the expiration time
-                        });
-                    }
-
-                    // Update the order notice and notice timestamp
-                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                        orderNotice,
-                        noticeUpdatedAt: currentTime, // Update the timestamp for when the notice was updated
-                        noticeUpdateCount: (order.noticeUpdateCount || 0) + 1 // Increment the counter
-                    });
-
-                    // Increment the notice update counter only for specific orderNotice values
-                    if (['Confirmed', 'Completed'].includes(orderNotice)) {
-                        const currentUpdateCount = order.noticeUpdateCount || 0;
-
-                        // If the update count reaches 2, update the status to Completed
-                        if (currentUpdateCount + 1 >= 2) {
-                            await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                                manualStatus: 'Completed'
-                            });
-                        }
-                    }
-
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.status(200).json({ message: 'Order notice updated successfully' });
-    } catch (error) {
-        console.error('Error updating order notice:', error);
-        res.status(500).json({ message: 'Error updating order notice' });
-    }
-});
-
-
-
-// Endpoint to fetch notice update count for a specific order by transaction ID
-app.get('/api/payment-order/notice-count/:transactionId', async (req, res) => {
-    const { transactionId } = req.params;
-
-    try {
-        const ordersSnapshot = await admin.database().ref('users').once('value');
-        const users = ordersSnapshot.val();
-        let orderFound = false;
-        let noticeUpdateCount = 0;
-
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
-                if (orderId) {
-                    const order = userOrders[orderId];
-                    noticeUpdateCount = order.noticeUpdateCount || 0;
-                    orderFound = true;
-                    break;
-                }
-            }
-        }
-
-        if (!orderFound) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-
-        res.status(200).json({ transactionId, noticeUpdateCount });
-    } catch (error) {
-        console.error('Error fetching notice update count:', error);
-        res.status(500).json({ message: 'Error fetching notice update count' });
-    }
-});
-
-
 
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
