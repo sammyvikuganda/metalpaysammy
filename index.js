@@ -68,7 +68,7 @@ app.post('/api/adverts', async (req, res) => {
         maxAmount, 
         availableQuantity, 
         timeLimit,
-        advertType 
+        advertType // New field for advert type
     } = req.body;
 
     // Ensure all required fields are provided
@@ -80,6 +80,7 @@ app.post('/api/adverts', async (req, res) => {
     if (!['sell', 'buy'].includes(advertType)) {
         return res.status(400).json({ message: 'Advert type must be either "sell" or "buy"' });
     }
+
     try {
         const advertId = generateTransactionId(); // Generate a unique ID for the advert
 
@@ -99,8 +100,8 @@ app.post('/api/adverts', async (req, res) => {
             },
             availableQuantity, 
             timeLimit: timeLimit || 30, 
-            advertStatus: 'Active'
-            advertType 
+            advertStatus: 'Active',
+            advertType // Save the advert type
         };
 
         // Save the new advert under the user's adverts
@@ -145,10 +146,10 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
         availableQuantity, 
         timeLimit, 
         advertStatus,
-        advertType 
+        advertType // New field for advert type
     } = req.body;
 
-    // Ensure all required fields are provided
+    // Ensure all required fields are provided, including advertType
     if (!advertiserNotice || !price || !minAmount || !maxAmount || !availableQuantity || !timeLimit || !advertStatus || !advertType) {
         return res.status(400).json({ message: 'All fields are required' });
     }
@@ -175,8 +176,8 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
             },
             availableQuantity,
             timeLimit, 
-            advertStatus,
-            advertType, 
+            advertStatus, 
+            advertType, // Save the advert type
             updatedAt: Date.now() // Update timestamp
         };
 
@@ -244,7 +245,6 @@ app.get('/api/adverts', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
 
 // Start the server
 app.listen(PORT, () => {
