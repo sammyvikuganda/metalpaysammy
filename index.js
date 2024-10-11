@@ -203,6 +203,30 @@ app.delete('/api/:userId/adverts/:advertId', async (req, res) => {
     }
 });
 
+
+
+// Fetch all adverts for all users
+app.get('/api/adverts', async (req, res) => {
+    try {
+        const usersSnapshot = await admin.database().ref('users').once('value');
+        if (!usersSnapshot.exists()) {
+            return res.status(404).json({ message: 'No users found' });
+        }
+
+        const allAdverts = {};
+        usersSnapshot.forEach(userSnapshot => {
+            const userId = userSnapshot.key;
+            const adverts = userSnapshot.val().adverts || {};
+            allAdverts[userId] = adverts; // Store adverts under the respective user ID
+        });
+
+        res.json({ allAdverts });
+    } catch (error) {
+        console.error('Error fetching all adverts:', error);
+        res.status(500).json({ message: 'Error fetching all adverts' });
+    }
+});
+
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
