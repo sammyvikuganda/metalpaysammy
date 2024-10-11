@@ -68,7 +68,7 @@ app.post('/api/adverts', async (req, res) => {
         maxAmount, 
         availableQuantity, 
         timeLimit,
-        advertType // New field for advert type
+        advertType 
     } = req.body;
 
     // Ensure all required fields are provided
@@ -80,7 +80,6 @@ app.post('/api/adverts', async (req, res) => {
     if (!['sell', 'buy'].includes(advertType)) {
         return res.status(400).json({ message: 'Advert type must be either "sell" or "buy"' });
     }
-
     try {
         const advertId = generateTransactionId(); // Generate a unique ID for the advert
 
@@ -100,8 +99,8 @@ app.post('/api/adverts', async (req, res) => {
             },
             availableQuantity, 
             timeLimit: timeLimit || 30, 
-            advertStatus: 'Active',
-            advertType // Save the advert type
+            advertStatus: 'Active'
+            advertType 
         };
 
         // Save the new advert under the user's adverts
@@ -146,7 +145,7 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
         availableQuantity, 
         timeLimit, 
         advertStatus,
-        advertType // New field for advert type
+        advertType 
     } = req.body;
 
     // Ensure all required fields are provided
@@ -176,8 +175,8 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
             },
             availableQuantity,
             timeLimit, 
-            advertStatus, 
-            advertType, // Save the advert type
+            advertStatus,
+            advertType, 
             updatedAt: Date.now() // Update timestamp
         };
 
@@ -216,7 +215,6 @@ app.delete('/api/:userId/adverts/:advertId', async (req, res) => {
         res.status(500).json({ message: 'Error deleting advert' });
     }
 });
-
 
 
 
