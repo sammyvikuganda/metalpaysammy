@@ -67,12 +67,18 @@ app.post('/api/adverts', async (req, res) => {
         minAmount, 
         maxAmount, 
         availableQuantity, 
-        timeLimit 
+        timeLimit,
+        advertType // New field for advert type
     } = req.body;
 
     // Ensure all required fields are provided
-    if (!advertiserNotice || !price || !userId || !minAmount || !maxAmount || !availableQuantity || !timeLimit) {
+    if (!advertiserNotice || !price || !userId || !minAmount || !maxAmount || !availableQuantity || !timeLimit || !advertType) {
         return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    // Validate advertType to be either 'sell' or 'buy'
+    if (!['sell', 'buy'].includes(advertType)) {
+        return res.status(400).json({ message: 'Advert type must be either "sell" or "buy"' });
     }
 
     try {
@@ -94,7 +100,8 @@ app.post('/api/adverts', async (req, res) => {
             },
             availableQuantity, 
             timeLimit: timeLimit || 30, 
-            advertStatus: 'Active' 
+            advertStatus: 'Active',
+            advertType // Save the advert type
         };
 
         // Save the new advert under the user's adverts
@@ -138,12 +145,18 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
         maxAmount, 
         availableQuantity, 
         timeLimit, 
-        advertStatus 
+        advertStatus,
+        advertType // New field for advert type
     } = req.body;
 
     // Ensure all required fields are provided
-    if (!advertiserNotice || !price || !minAmount || !maxAmount || !availableQuantity || !timeLimit || !advertStatus) {
+    if (!advertiserNotice || !price || !minAmount || !maxAmount || !availableQuantity || !timeLimit || !advertStatus || !advertType) {
         return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    // Validate advertType to be either 'sell' or 'buy'
+    if (!['sell', 'buy'].includes(advertType)) {
+        return res.status(400).json({ message: 'Advert type must be either "sell" or "buy"' });
     }
 
     try {
@@ -164,6 +177,7 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
             availableQuantity,
             timeLimit, 
             advertStatus, 
+            advertType, // Save the advert type
             updatedAt: Date.now() // Update timestamp
         };
 
@@ -205,6 +219,7 @@ app.delete('/api/:userId/adverts/:advertId', async (req, res) => {
 
 
 
+
 // Fetch all adverts for all users
 app.get('/api/adverts', async (req, res) => {
     try {
@@ -226,6 +241,12 @@ app.get('/api/adverts', async (req, res) => {
         res.status(500).json({ message: 'Error fetching all adverts' });
     }
 });
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+
 
 // Start the server
 app.listen(PORT, () => {
