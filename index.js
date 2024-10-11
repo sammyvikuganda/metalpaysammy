@@ -353,30 +353,40 @@ app.put('/api/payment-order/notice/:transactionId', async (req, res) => {
                     const order = userOrders[orderId];
 
                     // Check if it's the first update
-                    const isFirstUpdate = order.noticeUpdatedAt === null;
+                    const isFirstUpdate = !order.noticeUpdatedAt;
 
-                    // Update the order notice and related fields
+                    // Get the current time for updates
+                    const currentTime = Date.now();
+
+                    // If it's the first update, extend the expiration time and reset remainingTime
+                    if (isFirstUpdate) {
+                        const newExpirationTime = currentTime + 15 * 60 * 1000; // Add 15 minutes
+                        const updatedRemainingTime = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+                        await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                            createdAt: currentTime, // Set the new creation time as the current time
+                            remainingTime: updatedRemainingTime, // Reset the remaining time
+                            expirationTime: newExpirationTime // Extend the expiration time
+                        });
+                    }
+
+                    // Update the order notice and notice timestamp
                     await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
                         orderNotice,
-                        noticeUpdatedAt: Date.now(), // Update the timestamp for when the notice was updated
+                        noticeUpdatedAt: currentTime, // Update the timestamp for when the notice was updated
                         noticeUpdateCount: (order.noticeUpdateCount || 0) + 1 // Increment the counter
                     });
 
                     // Increment the notice update counter only for specific orderNotice values
                     if (['Confirmed', 'Completed'].includes(orderNotice)) {
+                        const currentUpdateCount = order.noticeUpdateCount || 0;
+
                         // If the update count reaches 2, update the status to Completed
-                        if (order.noticeUpdateCount + 1 >= 2) {
+                        if (currentUpdateCount + 1 >= 2) {
                             await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
                                 manualStatus: 'Completed'
                             });
                         }
-                    }
-
-                    // Update createdAt only if this is the first update
-                    if (isFirstUpdate) {
-                        await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
-                            createdAt: Date.now() // Update createdAt only on the first update
-                        });
                     }
 
                     orderFound = true;
