@@ -55,9 +55,9 @@ app.post('/api/create-user', async (req, res) => {
 
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId, orderNotice, orderType, paymentMethod, orderAdvice } = req.body;
+    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId, orderNotice } = req.body;
 
-    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId || !orderSenderId || !orderType || !paymentMethod) {
+    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId || !orderSenderId) {
         return res.status(400).json({ message: 'All fields except orderNotice are required' });
     }
 
@@ -82,10 +82,7 @@ app.post('/api/payment-order', async (req, res) => {
             manualStatus: null, // Add manualStatus to orders
             orderNotice: orderNotice || null, // Add orderNotice if provided
             noticeUpdatedAt: null, // Field for tracking when orderNotice was last updated
-            noticeUpdateCount: 0, // Count how many times the notice has been updated
-              orderType,
-              orderAdvice: orderAdvice || null,
-paymentMethod
+            noticeUpdateCount: 0 // Count how many times the notice has been updated
         };
 
         // Push the order into the user's paymentOrders
@@ -121,10 +118,7 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
                 remainingTime,
                 status: order.manualStatus || autoStatus, // Prioritize manual status if available
                 orderNotice: order.orderNotice || null, // Include order notice
-                noticeUpdatedAt: order.noticeUpdatedAt || null, // Include last updated time for notice
-orderType: order.orderType,
-orderAdvice: order.orderAdvice || null,
-paymentMethod: order.paymentMethod || null
+                noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
             };
         });
 
@@ -160,10 +154,7 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
                             remainingTime,
                             status: order.manualStatus || autoStatus, // Prioritize manual status if available
                             orderNotice: order.orderNotice || null, // Include order notice
-                            noticeUpdatedAt: order.noticeUpdatedAt || null, // Include last updated time for notice
-             orderType: order.orderType,
-orderAdvice: order.orderAdvice || null,
-paymentMethod: order.paymentMethod || null
+                            noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
                         };
                     });
 
@@ -453,49 +444,7 @@ app.get('/api/payment-order/notice-count/:transactionId', async (req, res) => {
 
 
 
-// Endpoint to fetch all payment orders for all users
-app.get('/api/payment-orders', async (req, res) => {
-    try {
-        const snapshot = await admin.database().ref('users').once('value');
-        const users = snapshot.val();
-        let ordersArray = [];
 
-        for (const userId in users) {
-            const userOrders = users[userId].paymentOrders;
-            if (userOrders) {
-                const userOrdersArray = Object.entries(userOrders).map(([id, order]) => {
-                    const remainingTime = 15 * 60 * 1000 - (Date.now() - order.createdAt);
-                    const isExpired = remainingTime <= 0;
-                    const autoStatus = isExpired ? 'Expired' : 'Pending';
-
-                    return {
-                        id,
-                        userId,
-                        ...order,
-                        remainingTime,
-                        status: order.manualStatus || autoStatus, // Prioritize manual status if available
-                        orderNotice: order.orderNotice || null, // Include order notice
-                        noticeUpdatedAt: order.noticeUpdatedAt || null, // Include last updated time for notice
-       orderType: order.orderType,
-      orderAdvice: order.orderAdvice || null,
-paymentMethod: order.paymentMethod || null
-                    };
-                });
-
-                ordersArray = [...ordersArray, ...userOrdersArray];
-            }
-        }
-
-        if (ordersArray.length === 0) {
-            return res.status(404).json({ message: 'No payment orders found for any users' });
-        }
-
-        res.json(ordersArray);
-    } catch (error) {
-        console.error('Error fetching all payment orders:', error);
-        res.status(500).json({ message: 'Error fetching all payment orders' });
-    }
-});
 
 
 
@@ -687,6 +636,11 @@ app.get('/api/adverts', async (req, res) => {
         console.error('Error fetching all adverts:', error);
         res.status(500).json({ message: 'Error fetching all adverts' });
     }
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
 
 // Start the server
