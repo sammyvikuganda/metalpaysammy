@@ -55,9 +55,9 @@ app.post('/api/create-user', async (req, res) => {
 
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
-    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId, orderNotice } = req.body;
+    const { amount, price, quantity, sellerName, sellerPhoneNumber, userId, orderSenderId, orderNotice, orderType, paymentMethod, orderAdvice } = req.body;
 
-    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId || !orderSenderId) {
+    if (!amount || !price || !quantity || !sellerName || !sellerPhoneNumber || !userId || !orderSenderId || !orderType || !paymentMethod) {
         return res.status(400).json({ message: 'All fields except orderNotice are required' });
     }
 
@@ -82,7 +82,10 @@ app.post('/api/payment-order', async (req, res) => {
             manualStatus: null, // Add manualStatus to orders
             orderNotice: orderNotice || null, // Add orderNotice if provided
             noticeUpdatedAt: null, // Field for tracking when orderNotice was last updated
-            noticeUpdateCount: 0 // Count how many times the notice has been updated
+            noticeUpdateCount: 0, // Count how many times the notice has been updated
+              orderType,
+              orderAdvice: orderAdvice || null,
+paymentMethod
         };
 
         // Push the order into the user's paymentOrders
@@ -118,7 +121,10 @@ app.get('/api/payment-orders/:userId', async (req, res) => {
                 remainingTime,
                 status: order.manualStatus || autoStatus, // Prioritize manual status if available
                 orderNotice: order.orderNotice || null, // Include order notice
-                noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
+                noticeUpdatedAt: order.noticeUpdatedAt || null, // Include last updated time for notice
+orderType: order.orderType,
+orderAdvice: order.orderAdvice || null,
+paymentMethod: order.paymentMethod || null
             };
         });
 
@@ -154,7 +160,10 @@ app.get('/api/payment-orders-sender/:orderSenderId', async (req, res) => {
                             remainingTime,
                             status: order.manualStatus || autoStatus, // Prioritize manual status if available
                             orderNotice: order.orderNotice || null, // Include order notice
-                            noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
+                            noticeUpdatedAt: order.noticeUpdatedAt || null, // Include last updated time for notice
+             orderType: order.orderType,
+orderAdvice: order.orderAdvice || null,
+paymentMethod: order.paymentMethod || null
                         };
                     });
 
@@ -466,7 +475,10 @@ app.get('/api/payment-orders', async (req, res) => {
                         remainingTime,
                         status: order.manualStatus || autoStatus, // Prioritize manual status if available
                         orderNotice: order.orderNotice || null, // Include order notice
-                        noticeUpdatedAt: order.noticeUpdatedAt || null // Include last updated time for notice
+                        noticeUpdatedAt: order.noticeUpdatedAt || null, // Include last updated time for notice
+       orderType: order.orderType,
+      orderAdvice: order.orderAdvice || null,
+paymentMethod: order.paymentMethod || null
                     };
                 });
 
@@ -484,13 +496,6 @@ app.get('/api/payment-orders', async (req, res) => {
         res.status(500).json({ message: 'Error fetching all payment orders' });
     }
 });
-
-
-
-
-
-
-
 
 
 
