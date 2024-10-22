@@ -760,8 +760,8 @@ app.post('/api/comment/:userId', async (req, res) => {
     const { userId } = req.params;
     const { commentText, commenterId } = req.body;
 
-    if (!commentText || !commenterId) {
-        return res.status(400).json({ message: 'Comment text and commenter ID are required' });
+    if (!commentText) {
+        return res.status(400).json({ message: 'Comment text is required' });
     }
 
     try {
@@ -773,10 +773,15 @@ app.post('/api/comment/:userId', async (req, res) => {
         const userData = userSnapshot.val();
         const currentReactions = userData.reactions || { likes: 0, dislikes: 0, comments: [] };
 
+        // Ensure comments is initialized as an array
+        if (!Array.isArray(currentReactions.comments)) {
+            currentReactions.comments = [];
+        }
+
         // Create a new comment object
         const newComment = {
             text: commentText,
-            commenterId: commenterId,
+            commenterId: commenterId || null, // Set to null if not provided
             timestamp: Date.now()
         };
 
@@ -792,6 +797,7 @@ app.post('/api/comment/:userId', async (req, res) => {
         res.status(500).json({ message: 'Error posting comment' });
     }
 });
+
 
 
 
