@@ -42,7 +42,12 @@ app.post('/api/create-user', async (req, res) => {
             totalInvested: 0,
             lastUpdated: Date.now(),
             transactionHistory: [],
-            referrals: []
+            referrals: [],
+            reactions: { 
+                likes: 0,           // Initialize likes to 0
+                dislikes: 0,        // Initialize dislikes to 0
+                comments: []        // Initialize comments as an empty array
+            }
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
@@ -688,6 +693,127 @@ app.get('/api/adverts', async (req, res) => {
         res.status(500).json({ message: 'Error fetching all adverts' });
     }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+// Endpoint to like a user
+app.post('/api/like/:userId', async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        if (!userSnapshot.exists()) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const userData = userSnapshot.val();
+        const currentReactions = userData.reactions || { likes: 0, dislikes: 0, comments: [] };
+
+        // Increase the likes count
+        currentReactions.likes += 1;
+
+        // Update the user's reactions
+        await admin.database().ref(`users/${userId}/reactions`).update(currentReactions);
+        res.status(200).json({ message: 'User liked successfully', likes: currentReactions.likes });
+    } catch (error) {
+        console.error('Error liking user:', error);
+        res.status(500).json({ message: 'Error liking user' });
+    }
+});
+
+// Endpoint to dislike a user
+app.post('/api/dislike/:userId', async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        if (!userSnapshot.exists()) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const userData = userSnapshot.val();
+        const currentReactions = userData.reactions || { likes: 0, dislikes: 0, comments: [] };
+
+        // Increase the dislikes count
+        currentReactions.dislikes += 1;
+
+        // Update the user's reactions
+        await admin.database().ref(`users/${userId}/reactions`).update(currentReactions);
+        res.status(200).json({ message: 'User disliked successfully', dislikes: currentReactions.dislikes });
+    } catch (error) {
+        console.error('Error disliking user:', error);
+        res.status(500).json({ message: 'Error disliking user' });
+    }
+});
+
+// Endpoint to post a comment for a user
+app.post('/api/comment/:userId', async (req, res) => {
+    const { userId } = req.params;
+    const { commentText, commenterId } = req.body;
+
+    if (!commentText || !commenterId) {
+        return res.status(400).json({ message: 'Comment text and commenter ID are required' });
+    }
+
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        if (!userSnapshot.exists()) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const userData = userSnapshot.val();
+        const currentReactions = userData.reactions || { likes: 0, dislikes: 0, comments: [] };
+
+        // Create a new comment object
+        const newComment = {
+            text: commentText,
+            commenterId: commenterId,
+            timestamp: Date.now()
+        };
+
+        // Add the new comment to the comments array
+        currentReactions.comments.push(newComment);
+
+        // Update the user's reactions with the new comment
+        await admin.database().ref(`users/${userId}/reactions`).update(currentReactions);
+
+        res.status(200).json({ message: 'Comment added successfully' });
+    } catch (error) {
+        console.error('Error posting comment:', error);
+        res.status(500).json({ message: 'Error posting comment' });
+    }
+});
+
+
+
+// Endpoint to fetch reactions for a specific user
+app.get('/api/reactions/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}/reactions`).once('value');
+        
+        if (!userSnapshot.exists()) {
+            return res.status(404).json({ message: 'User not found or no reactions available' });
+        }
+
+        const reactions = userSnapshot.val();
+        res.json(reactions);
+    } catch (error) {
+        console.error('Error fetching reactions:', error);
+        res.status(500).json({ message: 'Error fetching reactions' });
+    }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
