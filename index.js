@@ -698,6 +698,38 @@ app.get('/api/adverts', async (req, res) => {
 
 
 
+// Update advert status only
+app.put('/api/adverts/status/:userId/:advertId', async (req, res) => {
+    const { userId, advertId } = req.params;
+    const { advertStatus } = req.body; // Extract the new advert status from the request body
+
+    // Ensure the advertStatus field is provided
+    if (!advertStatus) {
+        return res.status(400).json({ message: 'Advert status is required' });
+    }
+
+    // Validate advertStatus to be one of the expected values
+    const validStatuses = ['Active', 'Inactive', 'Completed']; // Adjust this list based on your requirements
+    if (!validStatuses.includes(advertStatus)) {
+        return res.status(400).json({ message: `Advert status must be one of the following: ${validStatuses.join(', ')}` });
+    }
+
+    try {
+        // Check if the advert exists for the user
+        const advertSnapshot = await admin.database().ref(`users/${userId}/adverts/${advertId}`).once('value');
+        if (!advertSnapshot.exists()) {
+            return res.status(404).json({ message: 'Advert not found' });
+        }
+
+        // Update only the advert status
+        await admin.database().ref(`users/${userId}/adverts/${advertId}`).update({ advertStatus });
+
+        res.status(200).json({ message: 'Advert status updated successfully' });
+    } catch (error) {
+        console.error('Error updating advert status:', error);
+        res.status(500).json({ message: 'Error updating advert status' });
+    }
+});
 
 
 
