@@ -515,7 +515,8 @@ app.post('/api/adverts', async (req, res) => {
         airtelNumber, 
         mtnNumber, 
         chipperTag, 
-        bankAccountNumber, 
+        bankAccountNumber,
+        cryptoTransferAddress, 
         userId, // This acts as both the advert owner and title
         minAmount, 
         maxAmount, 
@@ -545,7 +546,8 @@ app.post('/api/adverts', async (req, res) => {
                 airtelNumber, 
                 mtnNumber, 
                 chipperTag, 
-                bankAccountNumber 
+                bankAccountNumber,
+                cryptoTransferAddress 
             },
             limits: {
                 minAmount, 
@@ -593,7 +595,8 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
         airtelNumber, 
         mtnNumber, 
         chipperTag, 
-        bankAccountNumber, 
+        bankAccountNumber,
+        cryptoTransferAddress, 
         minAmount, 
         maxAmount, 
         availableQuantity, 
@@ -621,7 +624,8 @@ app.put('/api/adverts/:userId/:advertId', async (req, res) => {
                 airtelNumber, 
                 mtnNumber, 
                 chipperTag, 
-                bankAccountNumber 
+                bankAccountNumber,
+                cryptoTransferAddress 
             },
             limits: {
                 minAmount,
