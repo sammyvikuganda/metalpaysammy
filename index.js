@@ -526,9 +526,9 @@ app.post('/api/adverts', async (req, res) => {
     } = req.body;
 
     // Ensure all required fields are provided
-    if (!advertiserNotice || !price || !userId || !minAmount || !maxAmount || !availableQuantity || !timeLimit || !advertType) {
-        return res.status(400).json({ message: 'All fields are required' });
-    }
+    if (!price || !userId || !minAmount || !maxAmount || !availableQuantity || !timeLimit || !advertType) {
+    return res.status(400).json({ message: 'All fields are required' });
+}
 
     // Validate advertType to be either 'sell' or 'buy'
     if (!['sell', 'buy'].includes(advertType)) {
@@ -554,7 +554,7 @@ app.post('/api/adverts', async (req, res) => {
                 maxAmount 
             },
             availableQuantity, 
-            timeLimit: timeLimit || 30, 
+            timeLimit, 
             advertStatus: 'Active',
             advertType // Save the advert type
         };
