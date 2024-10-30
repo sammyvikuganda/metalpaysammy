@@ -4,19 +4,24 @@ const admin = require('firebase-admin');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-    credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    }),
-    databaseURL: "https://metal-pay-55c31-default-rtdb.firebaseio.com/",
-});
+// Check if the Firebase app has already been initialized
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        }),
+        databaseURL: "https://metal-pay-55c31-default-rtdb.firebaseio.com/",
+    });
+} else {
+    console.log('Firebase app already initialized.');
+}
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
 
 // Function to generate a new transaction ID
 const generateTransactionId = () => {
