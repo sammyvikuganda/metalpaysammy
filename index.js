@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const QRCode = require('qrcode'); // Import the QR code library
 const cron = require('node-cron');
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,7 +19,6 @@ admin.initializeApp({
 // Middleware
 app.use(cors());
 app.use(express.json());
-
 
 // Function to generate a new transaction ID
 const generateTransactionId = () => {
@@ -46,19 +46,55 @@ app.post('/api/create-user', async (req, res) => {
             transactionHistory: [],
             referrals: [],
             reactions: { 
-                likes: 0,           // Initialize likes to 0
-                dislikes: 0,        // Initialize dislikes to 0
-                comments: []        // Initialize comments as an empty array
+                likes: 0,
+                dislikes: 0,
+                comments: []
             }
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
-        res.json({ userId });
+
+        // Generate a QR code for the user ID
+        const qrCodeDataUrl = await QRCode.toDataURL(userId);
+
+        // Respond with user ID and QR code
+        res.status(201).json({
+            userId,
+            qrCode: qrCodeDataUrl // This is the base64 encoded QR code image
+        });
     } catch (error) {
         console.error('Error creating user:', error);
         res.status(500).json({ message: 'Error creating user' });
     }
 });
+
+
+// Fetch user details along with QR code
+app.get('/api/user-details/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = snapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Generate a QR code for the user ID
+        const qrCodeDataUrl = await QRCode.toDataURL(userId);
+
+        // Send back the user data along with the QR code
+        res.json({
+            ...userData, // Spread the user data
+            userId,
+            qrCode: qrCodeDataUrl // Include the QR code as a base64 encoded image
+        });
+    } catch (error) {
+        console.error('Error fetching user details:', error);
+        res.status(500).json({ message: 'Error fetching user details' });
+    }
+});
+
 
 // Endpoint to receive and store payment order details under the specific user
 app.post('/api/payment-order', async (req, res) => {
