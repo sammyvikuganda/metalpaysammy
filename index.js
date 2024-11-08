@@ -1138,18 +1138,40 @@ app.post('/api/add-transaction', async (req, res) => {
 // In-memory cache for user data
 let userCache = {};
 
-// Function to calculate growing money based on the latest capital
+// Function to calculate growing money based on the latest capital and potential custom interest rate
 async function calculateGrowingMoney(userId) {
     const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-    const { capital, growingMoney, lastUpdated } = snapshot.val();
+    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestExpiry } = snapshot.val();
     const currentTime = Date.now();
     const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
     if (elapsedSeconds > 0) {
-        const interestRatePerSecond = Math.pow(1 + 0.0144, 1 / (24 * 60 * 60)) - 1;
+        // Determine if we should use the custom interest rate
+        let interestRatePerSecond;
+        
+        if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
+            // Custom rate is active
+            const interestRatePerHour = customInterestRatePerHour / 100;
+            interestRatePerSecond = Math.pow(1 + interestRatePerHour, 1 / 3600) - 1;
+        } else {
+            // Use default daily rate of 1.44%
+            const dailyRate = 0.0144;
+            interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
+
+            // Clear expired custom interest rate and expiry time from the database
+            if (customInterestRatePerHour || customInterestExpiry) {
+                await admin.database().ref(`users/${userId}`).update({
+                    customInterestRatePerHour: null,
+                    customInterestExpiry: null
+                });
+            }
+        }
+
+        // Calculate interest earned
         const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
         const newGrowingMoney = growingMoney + interestEarned;
 
+        // Update growing money and last updated time in the database
         await admin.database().ref(`users/${userId}`).update({
             growingMoney: newGrowingMoney,
             lastUpdated: currentTime
@@ -1160,6 +1182,44 @@ async function calculateGrowingMoney(userId) {
 
     return growingMoney;
 }
+
+// Endpoint to set a custom interest rate per hour for a specific user with an expiration time
+app.post('/api/set-custom-interest-rate', async (req, res) => {
+    const { userId, customInterestRatePerHour, durationInHours } = req.body;
+
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Ensure the interest rate and duration are valid
+        if (isNaN(customInterestRatePerHour) || customInterestRatePerHour <= 0) {
+            return res.status(400).json({ message: 'Invalid interest rate' });
+        }
+        if (isNaN(durationInHours) || durationInHours <= 0) {
+            return res.status(400).json({ message: 'Invalid duration' });
+        }
+
+        // Calculate expiration time in milliseconds
+        const customInterestExpiry = Date.now() + durationInHours * 60 * 60 * 1000;
+
+        // Update the custom interest rate and expiration time in the database
+        await admin.database().ref(`users/${userId}`).update({
+            customInterestRatePerHour,
+            customInterestExpiry
+        });
+
+        res.json({ success: true, message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours` });
+    } catch (error) {
+        console.error('Error setting custom interest rate:', error);
+        res.status(500).json({ message: 'Error setting custom interest rate' });
+    }
+});
+
+
 
 // Update capital and growing money immediately
 app.post('/api/update-capital', async (req, res) => {
