@@ -1187,7 +1187,7 @@ async function calculateGrowingMoney(userId) {
 
 // Endpoint to set a custom interest rate per hour for a specific user with an expiration time
 app.post('/api/set-custom-interest-rate', async (req, res) => {
-    const { userId, customInterestRatePerHour, durationInHours } = req.body;
+    const { userId, customInterestRatePerHour, durationInHours, updatedByUserId } = req.body;
 
     try {
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -1207,20 +1207,57 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         // Calculate expiration time in milliseconds
         const customInterestExpiry = Date.now() + durationInHours * 60 * 60 * 1000;
+        const customInterestSetAt = Date.now(); // Record the time the custom rate was set
 
-        // Update the custom interest rate and expiration time in the database
+        // Update the custom interest rate, expiration time, timestamp, and updater's user ID in the database
         await admin.database().ref(`users/${userId}`).update({
             customInterestRatePerHour,
-            customInterestExpiry
+            customInterestExpiry,
+            customInterestSetAt,         // Timestamp of setting the custom rate
+            updatedByUserId              // ID of the user who set the rate
         });
 
-        res.json({ success: true, message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours` });
+        res.json({ 
+            success: true, 
+            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} by user ${updatedByUserId} for ${durationInHours} hours` 
+        });
     } catch (error) {
         console.error('Error setting custom interest rate:', error);
         res.status(500).json({ message: 'Error setting custom interest rate' });
     }
 });
 
+
+// Endpoint to fetch all users with their custom interest rate details
+app.get('/api/fetch-custom-interest-details', async (req, res) => {
+    try {
+        const usersSnapshot = await admin.database().ref('users').once('value');
+        const usersData = usersSnapshot.val();
+        
+        if (!usersData) {
+            return res.status(404).json({ message: 'No users found' });
+        }
+
+        const userInterestDetails = Object.keys(usersData).map(userId => {
+            const { customInterestRatePerHour, customInterestExpiry, customInterestSetAt, updatedByUserId } = usersData[userId];
+            const isActive = customInterestRatePerHour && customInterestExpiry && Date.now() < customInterestExpiry;
+            
+            return {
+                userId,
+                customInterestRatePerHour,
+                customInterestExpiry,
+                customInterestSetAt,
+                updatedByUserId,
+                isActive
+            };
+        });
+
+        res.json({ success: true, data: userInterestDetails });
+    } catch (error) {
+        console.error('Error fetching custom interest details:', error);
+        res.status(500).json({ message: 'Error fetching custom interest details' });
+    }
+});
 
 
 // Update capital and growing money immediately
