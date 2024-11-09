@@ -1325,10 +1325,14 @@ app.get('/api/get-trend-activity-trend', async (req, res) => {
             // Calculate activity for each period and gather the rates
             period.forEach(entry => {
                 activityCount += entry.activityCount;
-                rates = [...rates, ...entry.rates];
+                
+                // Ensure rates is an array before iterating
+                if (Array.isArray(entry.rates)) {
+                    rates = [...rates, ...entry.rates];
+                }
             });
 
-            // Add each timestamp and its aggregated count to the array
+            // Add each timestamp and its aggregated count and rates to the array
             previousActivityCounts.push({ timestamp: startTime, activityCount, rates });
         });
 
