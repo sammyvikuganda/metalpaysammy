@@ -1,13 +1,3 @@
-
-
-
-
-
-
-
-
-
-
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -1226,12 +1216,31 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             customInterestSetAt         // Timestamp of setting the custom rate
         });
 
-        // Log the activity for trend line updates
+        // Calculate the start of the current hour
+        const currentHourStart = new Date().setMinutes(0, 0, 0); // Start of the current hour
+
+        // Log the activity for the current hour (aggregating counts by hour)
         const trendLogEntry = {
-            timestamp: customInterestSetAt,
-            activityCount: 1 // Each new rate setting counts as one activity
+            timestamp: currentHourStart,
+            activityCount: 1, // Increment the activity count for this hour
+            rates: [customInterestRatePerHour] // Store the custom rate for this activity
         };
-        await admin.database().ref('trendActivityLog').push(trendLogEntry);
+
+        // Check if there's already an entry for this hour
+        const trendSnapshot = await admin.database().ref('trendActivityLog').orderByChild('timestamp').equalTo(currentHourStart).once('value');
+        if (trendSnapshot.exists()) {
+            // If an entry already exists, update the count and rates
+            const existingEntry = trendSnapshot.val();
+            const entryKey = Object.keys(existingEntry)[0]; // Assuming only one entry per hour
+            const existingRates = existingEntry[entryKey].rates || [];
+            await admin.database().ref(`trendActivityLog/${entryKey}`).update({
+                activityCount: existingEntry[entryKey].activityCount + 1,
+                rates: [...existingRates, customInterestRatePerHour] // Add the new rate to the existing rates
+            });
+        } else {
+            // If no entry exists for this hour, create a new one
+            await admin.database().ref('trendActivityLog').push(trendLogEntry);
+        }
 
         res.json({ 
             success: true, 
@@ -1243,6 +1252,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
     }
 });
 
+
 // Calculate the current activity count by considering decay over time
 app.get('/api/get-trend-activity-log', async (req, res) => {
     try {
@@ -1251,6 +1261,7 @@ app.get('/api/get-trend-activity-log', async (req, res) => {
 
         const currentTime = Date.now();
         let currentActivityCount = 0;
+        let rates = [];
 
         // Iterate through the log and apply decay based on the age of each entry
         for (let key in trendActivityLog) {
@@ -1260,6 +1271,7 @@ app.get('/api/get-trend-activity-log', async (req, res) => {
             // Consider decay: if the activity is more than 1 hour old, reduce its impact
             if (timeDifference <= 60 * 60 * 1000) { // Within 1 hour, full impact
                 currentActivityCount += entry.activityCount;
+                rates = [...rates, ...entry.rates]; // Collect all rates set within the last hour
             } else {
                 // Gradual decay based on time passed (e.g., 5% decay per hour)
                 const hoursPast = Math.floor(timeDifference / (60 * 60 * 1000));
@@ -1270,13 +1282,15 @@ app.get('/api/get-trend-activity-log', async (req, res) => {
 
         res.json({
             success: true,
-            currentActivityCount
+            currentActivityCount,
+            rates  // Rates set by users in the last hour (with decay applied)
         });
     } catch (error) {
         console.error('Error fetching trend activity log:', error);
         res.status(500).json({ message: 'Error fetching trend activity log' });
     }
 });
+
 
 
 // Endpoint to fetch trend activity logs and compare increases or decreases
@@ -1287,41 +1301,53 @@ app.get('/api/get-trend-activity-trend', async (req, res) => {
 
         const currentTime = Date.now();
         const timeFrame = 60 * 60 * 1000; // 1 hour (in milliseconds)
+        const hoursToShow = 3; // Number of previous hours to compare
 
         let currentActivityCount = 0;
-        let previousActivityCount = 0;
-
+        let previousActivityCounts = [];
         let trendStatus = 'No change'; // Default trend status
 
-        // Retrieve logs for the last two periods (current and previous hour)
+        // Calculate the latest hour timestamps
+        const latestHoursTimestamps = Array.from({ length: hoursToShow }, (_, i) => currentTime - (i + 1) * timeFrame);
+
+        // Retrieve logs for the last few periods
         const logs = Object.values(trendActivityLog);
-        
+
+        // For each of the latest hours (i.e., last 3 hours)
+        latestHoursTimestamps.forEach((timestamp, index) => {
+            const startTime = timestamp;
+            const endTime = timestamp + timeFrame;
+
+            const period = logs.filter(entry => entry.timestamp >= startTime && entry.timestamp <= endTime);
+            let activityCount = 0;
+            let rates = [];
+
+            // Calculate activity for each period and gather the rates
+            period.forEach(entry => {
+                activityCount += entry.activityCount;
+                rates = [...rates, ...entry.rates];
+            });
+
+            // Add each timestamp and its aggregated count to the array
+            previousActivityCounts.push({ timestamp: startTime, activityCount, rates });
+        });
+
+        // Calculate current activity count for the latest hour
         const currentPeriod = logs.filter(entry => currentTime - entry.timestamp <= timeFrame);
-        const previousPeriod = logs.filter(entry => currentTime - entry.timestamp > timeFrame && currentTime - entry.timestamp <= timeFrame * 2);
-
-        // Calculate current activity count for the last hour
-        currentPeriod.forEach(entry => {
-            const timeDifference = currentTime - entry.timestamp;
-            currentActivityCount += (timeDifference <= timeFrame) ? entry.activityCount : 0;
-        });
-
-        // Calculate previous activity count for the hour before
-        previousPeriod.forEach(entry => {
-            const timeDifference = currentTime - entry.timestamp;
-            previousActivityCount += (timeDifference > timeFrame && timeDifference <= timeFrame * 2) ? entry.activityCount : 0;
-        });
+        currentActivityCount = currentPeriod.reduce((total, entry) => total + entry.activityCount, 0);
 
         // Compare counts to determine trend
-        if (currentActivityCount > previousActivityCount) {
+        const lastHourActivityCount = previousActivityCounts[0]?.activityCount || 0;
+        if (currentActivityCount > lastHourActivityCount) {
             trendStatus = 'Increasing';
-        } else if (currentActivityCount < previousActivityCount) {
+        } else if (currentActivityCount < lastHourActivityCount) {
             trendStatus = 'Decreasing';
         }
 
         res.json({
             success: true,
             currentActivityCount,
-            previousActivityCount,
+            previousActivityCounts, // Array of previous hour timestamps, activity counts, and rates
             trendStatus
         });
     } catch (error) {
@@ -1329,6 +1355,7 @@ app.get('/api/get-trend-activity-trend', async (req, res) => {
         res.status(500).json({ message: 'Error fetching trend activity trend' });
     }
 });
+
 
 
 
