@@ -1388,3 +1388,4 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+
