@@ -1138,56 +1138,9 @@ app.post('/api/add-transaction', async (req, res) => {
 // In-memory cache for user data
 let userCache = {};
 
-// Function to calculate growing money based on the latest capital and potential custom interest rate
-async function calculateGrowingMoney(userId) {
-    const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestExpiry } = snapshot.val();
-    const currentTime = Date.now();
-    const elapsedSeconds = (currentTime - lastUpdated) / 1000;
-
-    if (elapsedSeconds > 0) {
-        let interestRatePerSecond;
-        
-        if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
-            // Custom interest rate is active
-            const interestRatePerHour = customInterestRatePerHour / 100; // Convert to a decimal
-            const elapsedHours = elapsedSeconds / 3600; // Convert elapsed time to hours
-            // Calculate the interest earned over the elapsed time
-            const interestEarned = capital * (1 + interestRatePerHour * elapsedHours) - capital;
-            const newGrowingMoney = growingMoney + interestEarned;
-
-            // Update growing money and last updated time in the database
-            await admin.database().ref(`users/${userId}`).update({
-                growingMoney: newGrowingMoney,
-                lastUpdated: currentTime
-            });
-
-            return newGrowingMoney;
-        } else {
-            // Use default daily rate of 1.44%
-            const dailyRate = 0.0144;
-            interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
-
-            // Calculate interest earned with default rate
-            const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
-            const newGrowingMoney = growingMoney + interestEarned;
-
-            // Update growing money and last updated time in the database
-            await admin.database().ref(`users/${userId}`).update({
-                growingMoney: newGrowingMoney,
-                lastUpdated: currentTime
-            });
-
-            return newGrowingMoney;
-        }
-    }
-
-    return growingMoney;
-}
-
-// Endpoint to set a custom interest rate per hour for a specific user with an expiration time
+// Endpoint to set a custom interest rate per hour for a specific user with expiration
 app.post('/api/set-custom-interest-rate', async (req, res) => {
-    const { userId, customInterestRatePerHour, durationInHours } = req.body;
+    const { userId, customInterestRatePerHour, expirationTime } = req.body;
 
     try {
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -1197,168 +1150,64 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Ensure the interest rate and duration are valid
+        // Ensure the interest rate is valid
         if (isNaN(customInterestRatePerHour) || customInterestRatePerHour <= 0) {
             return res.status(400).json({ message: 'Invalid interest rate' });
         }
-        if (isNaN(durationInHours) || durationInHours <= 0) {
-            return res.status(400).json({ message: 'Invalid duration' });
-        }
 
-        // Calculate expiration time in milliseconds
-        const customInterestExpiry = Date.now() + durationInHours * 60 * 60 * 1000;
-        const customInterestSetAt = Date.now(); // Record the time the custom rate was set
-
-        // Update the custom interest rate, expiration time, and timestamp in the database
+        // Store the custom interest rate and expiration time
         await admin.database().ref(`users/${userId}`).update({
             customInterestRatePerHour,
-            customInterestExpiry,
-            customInterestSetAt         // Timestamp of setting the custom rate
+            customInterestRateExpiration: Date.now() + expirationTime * 1000  // Store expiration time in milliseconds
         });
 
-        // Calculate the start of the current hour
-        const currentHourStart = new Date().setMinutes(0, 0, 0); // Start of the current hour
-
-        // Log the activity for the current hour (aggregating counts by hour)
-        const trendLogEntry = {
-            timestamp: currentHourStart,
-            activityCount: 1, // Increment the activity count for this hour
-            rates: [customInterestRatePerHour] // Store the custom rate for this activity
-        };
-
-        // Check if there's already an entry for this hour
-        const trendSnapshot = await admin.database().ref('trendActivityLog').orderByChild('timestamp').equalTo(currentHourStart).once('value');
-        if (trendSnapshot.exists()) {
-            // If an entry already exists, update the count and rates
-            const existingEntry = trendSnapshot.val();
-            const entryKey = Object.keys(existingEntry)[0]; // Assuming only one entry per hour
-            const existingRates = existingEntry[entryKey].rates || [];
-            await admin.database().ref(`trendActivityLog/${entryKey}`).update({
-                activityCount: existingEntry[entryKey].activityCount + 1,
-                rates: [...existingRates, customInterestRatePerHour] // Add the new rate to the existing rates
-            });
-        } else {
-            // If no entry exists for this hour, create a new one
-            await admin.database().ref('trendActivityLog').push(trendLogEntry);
-        }
-
-        res.json({ 
-            success: true, 
-            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours` 
-        });
+        res.json({ success: true, message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${expirationTime / 60} minutes` });
     } catch (error) {
         console.error('Error setting custom interest rate:', error);
         res.status(500).json({ message: 'Error setting custom interest rate' });
     }
 });
 
+// Function to calculate growing money based on the latest capital and potential custom interest rate
+async function calculateGrowingMoney(userId) {
+    const snapshot = await admin.database().ref(`users/${userId}`).once('value');
+    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestRateExpiration } = snapshot.val();
+    const currentTime = Date.now();
+    const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
-// Calculate the current activity count by considering decay over time
-app.get('/api/get-trend-activity-log', async (req, res) => {
-    try {
-        const snapshot = await admin.database().ref('trendActivityLog').once('value');
-        const trendActivityLog = snapshot.val() || {}; // Retrieve log or return empty if none
+    let interestRatePerSecond;
 
-        const currentTime = Date.now();
-        let currentActivityCount = 0;
-        let rates = [];
-
-        // Iterate through the log and apply decay based on the age of each entry
-        for (let key in trendActivityLog) {
-            const entry = trendActivityLog[key];
-            const timeDifference = currentTime - entry.timestamp;
-
-            // Consider decay: if the activity is more than 1 hour old, reduce its impact
-            if (timeDifference <= 60 * 60 * 1000) { // Within 1 hour, full impact
-                currentActivityCount += entry.activityCount;
-                rates = [...rates, ...entry.rates]; // Collect all rates set within the last hour
-            } else {
-                // Gradual decay based on time passed (e.g., 5% decay per hour)
-                const hoursPast = Math.floor(timeDifference / (60 * 60 * 1000));
-                const decayFactor = 0.95; // 5% decay per hour
-                currentActivityCount += entry.activityCount * Math.pow(decayFactor, hoursPast);
-            }
+    if (elapsedSeconds > 0) {
+        if (customInterestRateExpiration && currentTime < customInterestRateExpiration) {
+            // Custom rate is still valid
+            const interestRatePerHour = customInterestRatePerHour / 100;
+            interestRatePerSecond = Math.pow(1 + interestRatePerHour, 1 / 3600) - 1;
+        } else {
+            // Use default rate if the custom rate has expired
+            const dailyRate = 0.0144;  // Default daily rate (1.44%)
+            interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
         }
 
-        res.json({
-            success: true,
-            currentActivityCount,
-            rates  // Rates set by users in the last hour (with decay applied)
+        // Calculate interest earned using the appropriate rate
+        const interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
+        const newGrowingMoney = growingMoney + interestEarned;
+
+        // Update growing money and last updated time in the database
+        await admin.database().ref(`users/${userId}`).update({
+            growingMoney: newGrowingMoney,
+            lastUpdated: currentTime
         });
-    } catch (error) {
-        console.error('Error fetching trend activity log:', error);
-        res.status(500).json({ message: 'Error fetching trend activity log' });
+
+        return newGrowingMoney;
     }
-});
+
+    return growingMoney;
+}
 
 
 
-// Endpoint to fetch trend activity logs and compare increases or decreases
-app.get('/api/get-trend-activity-trend', async (req, res) => {
-    try {
-        const snapshot = await admin.database().ref('trendActivityLog').once('value');
-        const trendActivityLog = snapshot.val() || {}; // Retrieve log or return empty if none
 
-        const currentTime = Date.now();
-        const timeFrame = 60 * 60 * 1000; // 1 hour (in milliseconds)
-        const hoursToShow = 3; // Number of previous hours to compare
 
-        let currentActivityCount = 0;
-        let previousActivityCounts = [];
-        let trendStatus = 'No change'; // Default trend status
-
-        // Calculate the latest hour timestamps
-        const latestHoursTimestamps = Array.from({ length: hoursToShow }, (_, i) => currentTime - (i + 1) * timeFrame);
-
-        // Retrieve logs for the last few periods
-        const logs = Object.values(trendActivityLog);
-
-        // For each of the latest hours (i.e., last 3 hours)
-        latestHoursTimestamps.forEach((timestamp, index) => {
-            const startTime = timestamp;
-            const endTime = timestamp + timeFrame;
-
-            const period = logs.filter(entry => entry.timestamp >= startTime && entry.timestamp <= endTime);
-            let activityCount = 0;
-            let rates = [];
-
-            // Calculate activity for each period and gather the rates
-            period.forEach(entry => {
-                activityCount += entry.activityCount;
-                
-                // Ensure rates is an array before iterating
-                if (Array.isArray(entry.rates)) {
-                    rates = [...rates, ...entry.rates];
-                }
-            });
-
-            // Add each timestamp and its aggregated count and rates to the array
-            previousActivityCounts.push({ timestamp: startTime, activityCount, rates });
-        });
-
-        // Calculate current activity count for the latest hour
-        const currentPeriod = logs.filter(entry => currentTime - entry.timestamp <= timeFrame);
-        currentActivityCount = currentPeriod.reduce((total, entry) => total + entry.activityCount, 0);
-
-        // Compare counts to determine trend
-        const lastHourActivityCount = previousActivityCounts[0]?.activityCount || 0;
-        if (currentActivityCount > lastHourActivityCount) {
-            trendStatus = 'Increasing';
-        } else if (currentActivityCount < lastHourActivityCount) {
-            trendStatus = 'Decreasing';
-        }
-
-        res.json({
-            success: true,
-            currentActivityCount,
-            previousActivityCounts, // Array of previous hour timestamps, activity counts, and rates
-            trendStatus
-        });
-    } catch (error) {
-        console.error('Error fetching trend activity trend:', error);
-        res.status(500).json({ message: 'Error fetching trend activity trend' });
-    }
-});
 
 
 
