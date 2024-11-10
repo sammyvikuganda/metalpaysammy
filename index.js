@@ -1178,6 +1178,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 });
 
 
+
 // Function to calculate growing money based on the latest capital and potential custom interest rate
 async function calculateGrowingMoney(userId) {
     const snapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -1191,8 +1192,9 @@ async function calculateGrowingMoney(userId) {
         
         if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
             // Custom rate is active, convert to per-second interest rate with precision
-            const interestRatePerHour = customInterestRatePerHour / 100;
-            interestRatePerSecond = Math.pow(1 + interestRatePerHour, 1 / 3600) - 1;
+            const interestRatePerHourDecimal = customInterestRatePerHour / 100;
+            // For continuous compounding, calculate per-second growth rate
+            interestRatePerSecond = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
         } else {
             // Use default daily rate of 1.44%
             const dailyRate = 0.0144;
@@ -1207,7 +1209,7 @@ async function calculateGrowingMoney(userId) {
             }
         }
 
-        // Calculate interest earned with high precision
+        // Calculate interest earned with high precision using the per-second rate
         const interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
         const newGrowingMoney = growingMoney + interestEarned;
 
@@ -1222,6 +1224,7 @@ async function calculateGrowingMoney(userId) {
 
     return growingMoney;
 }
+
 
 
 
