@@ -1187,30 +1187,23 @@ async function calculateGrowingMoney(userId) {
     const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
     if (elapsedSeconds > 0) {
+        let interestEarned = 0;
+
         // Determine if we should use the custom interest rate
-        let interestRatePerSecond;
-        
         if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
-            // Custom rate is active, convert to per-second interest rate with precision
+            // Custom rate is active, apply simple interest
             const interestRatePerHourDecimal = customInterestRatePerHour / 100;
-            // For continuous compounding, calculate per-second growth rate
-            interestRatePerSecond = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
+            // Apply simple interest formula: interest = capital * rate * time
+            interestEarned = capital * interestRatePerHourDecimal * (elapsedSeconds / 3600);
         } else {
             // Use default daily rate of 1.44%
             const dailyRate = 0.0144;
-            interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
-
-            // Clear expired custom interest rate and expiry time from the database
-            if (customInterestRatePerHour || customInterestExpiry) {
-                await admin.database().ref(`users/${userId}`).update({
-                    customInterestRatePerHour: null,
-                    customInterestExpiry: null
-                });
-            }
+            const interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
+            // Calculate interest using continuous compounding for small rates
+            interestEarned = capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital;
         }
 
-        // Calculate interest earned with high precision using the per-second rate
-        const interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
+        // Calculate the new growing money
         const newGrowingMoney = growingMoney + interestEarned;
 
         // Update growing money and last updated time in the database
