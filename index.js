@@ -1207,12 +1207,12 @@ async function calculateGrowingMoney(userId) {
     if (elapsedSeconds > 0) {
         let interestEarned = 0;
 
-        // If custom interest rate is active, calculate growing money solely from immediate profits
+        // Check if custom interest rate is active
         if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
             const interestRatePerHourDecimal = customInterestRatePerHour / 100;
             const interestRatePerSecond = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
 
-            // Calculate the interest earned based on immediate profits and the time elapsed
+            // Calculate interest earned based on immediate profits and time elapsed
             interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
             const newGrowingMoney = growingMoney + interestEarned;
 
@@ -1238,34 +1238,33 @@ async function calculateGrowingMoney(userId) {
                 return newGrowingMoney;
             }
         } else {
+            // Custom interest rate has expired; transfer any remaining immediate profits to growing money
+            const newGrowingMoney = growingMoney + (immediateProfits || 0);
+
             // Default rate of 1.44% per day if custom rate is not active
             const dailyRate = 0.0144;  // Default daily rate (1.44%)
             const interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
 
             // Calculate interest earned with the default rate
             interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
-            const newGrowingMoney = growingMoney + interestEarned;
+            const finalGrowingMoney = newGrowingMoney + interestEarned;
 
-            // Clear expired custom interest rate and expiry time from the database
-            if (customInterestRatePerHour || customInterestExpiry) {
-                await admin.database().ref(`users/${userId}`).update({
-                    customInterestRatePerHour: null,
-                    customInterestExpiry: null
-                });
-            }
-
-            // Update growing money based on default rate
+            // Clear expired custom interest rate and expiry time, set immediate profits to zero
             await admin.database().ref(`users/${userId}`).update({
-                growingMoney: newGrowingMoney,
+                customInterestRatePerHour: null,
+                customInterestExpiry: null,
+                growingMoney: finalGrowingMoney,
+                immediateProfits: 0,
                 lastUpdated: currentTime
             });
 
-            return newGrowingMoney;
+            return finalGrowingMoney;
         }
     }
 
     return growingMoney; // If no time has passed, return current growing money
 }
+
 
 
 
