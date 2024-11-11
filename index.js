@@ -1179,27 +1179,26 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
 
 
-// Function to calculate growing money based on elapsed time
+// Function to calculate growing money based on the latest capital and potential custom interest rate
 async function calculateGrowingMoney(userId) {
     const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestExpiry } = snapshot.val();
+    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestExpiry, customInterestSetTime } = snapshot.val();
     const currentTime = Date.now();
     const elapsedSeconds = (currentTime - lastUpdated) / 1000;
 
     if (elapsedSeconds > 0) {
-        // Determine if custom interest rate is still active
         let interestRatePerSecond;
-        
+
+        // If custom interest rate is active, calculate using that
         if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
-            // Convert the custom interest rate per hour to a per-second rate
             const interestRatePerHourDecimal = customInterestRatePerHour / 100;
             interestRatePerSecond = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
         } else {
-            // Use the default daily interest rate if custom rate expired or not set
+            // Use default daily rate of 1.44% if custom rate has expired
             const dailyRate = 0.0144;
             interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
 
-            // Clear expired custom interest rate from database
+            // Clear expired custom interest rate and expiry time from the database
             if (customInterestRatePerHour || customInterestExpiry) {
                 await admin.database().ref(`users/${userId}`).update({
                     customInterestRatePerHour: null,
@@ -1208,11 +1207,11 @@ async function calculateGrowingMoney(userId) {
             }
         }
 
-        // Calculate interest accrued with high precision over elapsed seconds
+        // Calculate the total interest accrued using the full elapsed time
         const interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
         const newGrowingMoney = growingMoney + interestEarned;
 
-        // Only update lastUpdated timestamp after calculation
+        // Update the growing money and last updated time in the database
         await admin.database().ref(`users/${userId}`).update({
             growingMoney: newGrowingMoney,
             lastUpdated: currentTime
@@ -1223,6 +1222,9 @@ async function calculateGrowingMoney(userId) {
 
     return growingMoney;
 }
+
+
+
 
 
 
