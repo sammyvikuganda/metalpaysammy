@@ -1159,61 +1159,92 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             return res.status(400).json({ message: 'Invalid duration' });
         }
 
+        // Get user's current capital
+        const { capital } = userData;
+
+        // Calculate immediate profits
+        const immediateProfit = calculateImmediateProfit(capital, customInterestRatePerHour, durationInHours);
+
         // Calculate expiration time in milliseconds
         const customInterestExpiry = Date.now() + durationInHours * 60 * 60 * 1000;
         const customInterestSetTime = Date.now();  // Store the time when custom interest is set
 
-        // Update the custom interest rate, expiration time, and set time in the database
+        // Update the custom interest rate, expiration time, set time, and immediate profit in the database
         await admin.database().ref(`users/${userId}`).update({
             customInterestRatePerHour,
             customInterestExpiry,
-            customInterestSetTime  // Store the timestamp of when the interest rate was set
+            customInterestSetTime,
+            immediateProfits: immediateProfit  // Store the immediate profits
         });
 
-        res.json({ success: true, message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours` });
+        res.json({ 
+            success: true, 
+            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours, immediate profit: ${immediateProfit}` 
+        });
     } catch (error) {
         console.error('Error setting custom interest rate:', error);
         res.status(500).json({ message: 'Error setting custom interest rate' });
     }
 });
 
+// Function to calculate immediate profit based on capital, custom interest rate per hour, and duration
+function calculateImmediateProfit(capital, customInterestRatePerHour, durationInHours) {
+    const interestRatePerHourDecimal = customInterestRatePerHour / 100;
+    // Calculate the immediate profit using simple interest for the given duration
+    const immediateProfit = capital * interestRatePerHourDecimal * durationInHours;
+    return Math.round(immediateProfit * 1e10) / 1e10; // Rounded to 10 decimal places for precision
+}
 
 
-// Function to calculate growing money based on the latest capital and potential custom interest rate
+
+// Function to calculate growing money based on the latest capital and custom interest rate
 async function calculateGrowingMoney(userId) {
     const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestExpiry, customInterestSetTime } = snapshot.val();
+    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestExpiry, immediateProfits } = snapshot.val();
     const currentTime = Date.now();
-    const elapsedSeconds = (currentTime - lastUpdated) / 1000;
+    const elapsedSeconds = (currentTime - lastUpdated) / 1000; // Time passed in seconds
 
     if (elapsedSeconds > 0) {
-        let interestRatePerSecond;
+        let interestEarned = 0;
 
-        // If custom interest rate is active, calculate using that
+        // If custom interest rate is active, calculate growing money solely from immediate profits
         if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
             const interestRatePerHourDecimal = customInterestRatePerHour / 100;
-            interestRatePerSecond = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
-        } else {
-            // Use default daily rate of 1.44% if custom rate has expired
-            const dailyRate = 0.0144;
-            interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
+            const interestRatePerSecond = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
 
-            // Calculate and add the interest that was missed during the expired custom rate period
-            if (customInterestRatePerHour && customInterestExpiry && currentTime >= customInterestExpiry) {
-                const expiredPeriodSeconds = (currentTime - customInterestExpiry) / 1000;
-                const interestRatePerHourDecimal = customInterestRatePerHour / 100;
-                const interestRatePerSecondExpired = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
+            // Calculate the interest earned based on immediate profits and the time elapsed
+            interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
+            const newGrowingMoney = growingMoney + interestEarned;
 
-                const missedInterest = Math.round((capital * Math.pow(1 + interestRatePerSecondExpired, expiredPeriodSeconds) - capital) * 1e10) / 1e10;
-                const newGrowingMoney = growingMoney + missedInterest;
-                // Update the growing money and last updated time to reflect the missed interest
+            // Deduct from immediate profits and add to growing money
+            if (immediateProfits && immediateProfits >= interestEarned) {
+                const newImmediateProfits = immediateProfits - interestEarned;
+
+                // Update database with new growing money and immediate profits
+                await admin.database().ref(`users/${userId}`).update({
+                    growingMoney: newGrowingMoney,
+                    immediateProfits: newImmediateProfits,
+                    lastUpdated: currentTime
+                });
+
+                return newGrowingMoney;
+            } else {
+                // If insufficient immediate profits, just update growing money
                 await admin.database().ref(`users/${userId}`).update({
                     growingMoney: newGrowingMoney,
                     lastUpdated: currentTime
                 });
 
-                return newGrowingMoney; // Return the updated growing money with missed interest added
+                return newGrowingMoney;
             }
+        } else {
+            // Default rate of 1.44% per day if custom rate is not active
+            const dailyRate = 0.0144;  // Default daily rate (1.44%)
+            const interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
+
+            // Calculate interest earned with the default rate
+            interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
+            const newGrowingMoney = growingMoney + interestEarned;
 
             // Clear expired custom interest rate and expiry time from the database
             if (customInterestRatePerHour || customInterestExpiry) {
@@ -1222,22 +1253,18 @@ async function calculateGrowingMoney(userId) {
                     customInterestExpiry: null
                 });
             }
+
+            // Update growing money based on default rate
+            await admin.database().ref(`users/${userId}`).update({
+                growingMoney: newGrowingMoney,
+                lastUpdated: currentTime
+            });
+
+            return newGrowingMoney;
         }
-
-        // Calculate the total interest accrued using the full elapsed time
-        const interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
-        const newGrowingMoney = growingMoney + interestEarned;
-
-        // Update the growing money and last updated time in the database
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
-
-        return newGrowingMoney;
     }
 
-    return growingMoney;
+    return growingMoney; // If no time has passed, return current growing money
 }
 
 
