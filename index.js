@@ -942,13 +942,14 @@ app.get('/api/referrals/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = snapshot.val() || { referrals: [], referralEarnings: 0, referralEarningsBonus: 0 };
+        const userData = snapshot.val() || { referrals: {}, referralEarnings: 0, referralEarningsBonus: 0 };
         
-        // Extract referral data
-        const { referrals, referralEarnings, referralEarningsBonus } = userData;
+        // Extract referral data safely (set empty object if no referrals exist)
+        const referrals = userData.referrals ? Object.values(userData.referrals) : [];
+        const { referralEarnings, referralEarningsBonus } = userData;
 
         res.json({ 
-            referrals: Object.values(referrals), 
+            referrals, 
             referralEarnings: Number(referralEarnings), // Ensure it is a number
             referralEarningsBonus: Number(referralEarningsBonus) // Ensure it is a number
         });
