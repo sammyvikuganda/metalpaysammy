@@ -875,18 +875,24 @@ app.post('/api/comment/:userId', async (req, res) => {
 
 
 
-// Endpoint to fetch reactions for a specific user
+// Endpoint to fetch reactions and comments for a specific user
 app.get('/api/reactions/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const userSnapshot = await admin.database().ref(`users/${userId}/reactions`).once('value');
-        
+
         if (!userSnapshot.exists()) {
             return res.status(404).json({ message: 'User not found or no reactions available' });
         }
 
         const reactions = userSnapshot.val();
-        res.json(reactions);
+        const response = {
+            likes: reactions.likes || 0,
+            dislikes: reactions.dislikes || 0,
+            comments: reactions.comments || []
+        };
+
+        res.status(200).json(response);
     } catch (error) {
         console.error('Error fetching reactions:', error);
         res.status(500).json({ message: 'Error fetching reactions' });
