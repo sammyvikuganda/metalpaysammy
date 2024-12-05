@@ -544,6 +544,50 @@ paymentMethod: order.paymentMethod || null
 
 
 
+// Endpoint to update the order advice for a specific order
+app.put('/api/payment-order/advice/:transactionId', async (req, res) => {
+    const { transactionId } = req.params;
+    const { orderAdvice } = req.body;
+
+    if (!orderAdvice) {
+        return res.status(400).json({ message: 'Order advice is required' });
+    }
+
+    try {
+        const ordersSnapshot = await admin.database().ref('users').once('value');
+        const users = ordersSnapshot.val();
+        let orderFound = false;
+
+        for (const userId in users) {
+            const userOrders = users[userId].paymentOrders;
+            if (userOrders) {
+                const orderId = Object.keys(userOrders).find(id => userOrders[id].transactionId === transactionId);
+                if (orderId) {
+                    // Update the order advice
+                    await admin.database().ref(`users/${userId}/paymentOrders/${orderId}`).update({
+                        orderAdvice
+                    });
+
+                    orderFound = true;
+                    break;
+                }
+            }
+        }
+
+        if (!orderFound) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        res.status(200).json({ message: 'Order advice updated successfully' });
+    } catch (error) {
+        console.error('Error updating order advice:', error);
+        res.status(500).json({ message: 'Error updating order advice' });
+    }
+});
+
+
+
+
 
 // Create a new advert with updated fields
 app.post('/api/adverts', async (req, res) => {
