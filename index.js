@@ -1268,6 +1268,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         let userEarnings = 0;
         let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
+        let chance = 0; // We'll store the used chance here
 
         if (nextPosition % 2 !== 0) {
             updatedLoses += 1;
@@ -1282,9 +1283,10 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             poolBalance = 0; // Pool balance is emptied after the user wins
             nextPosition = 1; // Reset the position after a win
             updatedLoses = 0; // Reset losses after reward
+            chance = 100; // Treat this as 100% chance win
         } else {
             // Apply the chance logic for regular cases
-            let chance = positionChances[nextPosition] || 0;
+            chance = positionChances[nextPosition] || 0;
             if (chance > 0) {
                 userEarnings = (poolBalance * chance) / 100;
                 poolBalance -= userEarnings;
@@ -1304,6 +1306,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             capital: newCapital,
             earnedFromPool: newEarnedFromPool,
             loses: updatedLoses,
+            chance, // Record the actual chance used
             lastUpdated: Date.now()
         });
 
