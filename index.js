@@ -1190,7 +1190,6 @@ app.post('/api/add-transaction', async (req, res) => {
 let userCache = {};
 
 
-// Endpoint to set a custom interest rate per hour for a specific user with an expiration time
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, customInterestRatePerHour, durationInHours, paidAmount } = req.body;
 
@@ -1222,6 +1221,9 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         // Set capital to 0
         const newCapital = 0;
 
+        // Add the deducted capital to the immediate profits
+        const updatedImmediateProfit = immediateProfit + capital;
+
         // Calculate expiration time in milliseconds
         const customInterestExpiry = Date.now() + durationInHours * 60 * 60 * 1000;
         const customInterestSetTime = Date.now();  // Store the time when custom interest is set
@@ -1233,20 +1235,18 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             customInterestExpiry,
             customInterestSetTime,
             paidAmount,  // Store the paid amount
-            immediateProfits: immediateProfit  // Store the immediate profits
+            immediateProfits: updatedImmediateProfit  // Store the updated immediate profits
         });
 
         res.json({ 
             success: true, 
-            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours, paid amount: ${paidAmount}, immediate profit: ${immediateProfit}, capital set to 0` 
+            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours, paid amount: ${paidAmount}, immediate profit: ${updatedImmediateProfit}, capital set to 0` 
         });
     } catch (error) {
         console.error('Error setting custom interest rate:', error);
         res.status(500).json({ message: 'Error setting custom interest rate' });
     }
 });
-
-
 
 // Function to calculate immediate profit based on capital, custom interest rate per hour, and duration
 function calculateImmediateProfit(capital, customInterestRatePerHour, durationInHours) {
@@ -1255,6 +1255,7 @@ function calculateImmediateProfit(capital, customInterestRatePerHour, durationIn
     const immediateProfit = capital * interestRatePerHourDecimal * durationInHours;
     return Math.round(immediateProfit * 1e10) / 1e10; // Rounded to 10 decimal places for precision
 }
+
 
 
 
