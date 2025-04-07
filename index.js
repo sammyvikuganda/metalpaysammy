@@ -1235,7 +1235,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
     try {
         console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
 
-        // Fetch user data from Firebase (Replace with your actual Firebase DB path)
+        // Fetch user data from Firebase
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
         const userData = userSnapshot.val();
 
@@ -1305,6 +1305,18 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
             // Set the next position to 1 (reset for next user)
             currentPosition = 1;
+        }
+
+        // Ensure no NaN values are being set in Firebase
+        if (isNaN(newCapital) || isNaN(newEarnedFromPool) || isNaN(userEarnings) || isNaN(poolBalance) || isNaN(companyEarnings)) {
+            console.error('Invalid values detected during update', {
+                newCapital,
+                newEarnedFromPool,
+                userEarnings,
+                poolBalance,
+                companyEarnings
+            });
+            return res.status(500).json({ message: 'Invalid values detected during update' });
         }
 
         // Update user data in Firebase
