@@ -1225,12 +1225,14 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         // Update the custom interest rate, expiration time, set time, paid amount, and immediate profit in the database
         await admin.database().ref(`users/${userId}`).update({
-            customInterestRatePerHour,
-            customInterestExpiry,
-            customInterestSetTime,
-            paidAmount,  // Store the paid amount
-            immediateProfits: immediateProfit  // Store the immediate profits
-        });
+    customInterestRatePerHour,
+    customInterestExpiry,
+    customInterestSetTime,
+    paidAmount,
+    immediateProfits: immediateProfit,
+    capitalDeductedForCustomRate: capital, // Store the capital that will be restored later
+    capital: 0 // Set capital to 0 for the duration of custom rate
+});
 
         res.json({ 
             success: true, 
@@ -1295,7 +1297,8 @@ async function calculateGrowingMoney(userId) {
             }
         } else {
             // Custom interest rate has expired; transfer any remaining immediate profits to growing money
-            const newGrowingMoney = growingMoney + (immediateProfits || 0);
+            const deductedCapital = snapshot.val().capitalDeductedForCustomRate || 0;
+const newGrowingMoney = growingMoney + (immediateProfits || 0) + deductedCapital;
 
             // Default rate of 1.44% per day if custom rate is not active
             const dailyRate = 0.0144;  // Default daily rate (1.44%)
@@ -1307,13 +1310,14 @@ async function calculateGrowingMoney(userId) {
 
             // Clear expired custom interest rate and expiry time, set immediate profits and paid amount to zero
             await admin.database().ref(`users/${userId}`).update({
-                customInterestRatePerHour: null,
-                customInterestExpiry: null,
-                paidAmount: null,  // Clear the paid amount
-                growingMoney: finalGrowingMoney,
-                immediateProfits: 0,
-                lastUpdated: currentTime
-            });
+    customInterestRatePerHour: null,
+    customInterestExpiry: null,
+    paidAmount: null,
+    growingMoney: finalGrowingMoney,
+    immediateProfits: 0,
+    capitalDeductedForCustomRate: null, // Clear stored capital
+    lastUpdated: currentTime
+});
 
             return finalGrowingMoney;
         }
