@@ -1235,6 +1235,17 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
 
     try {
+        // Check if the server is busy
+        const serverStatusSnapshot = await admin.database().ref('serverStatus').once('value');
+        const serverStatus = serverStatusSnapshot.val() || {};
+
+        if (serverStatus.busy) {
+            return res.status(503).json({ message: 'Server is busy, please try again later.' });
+        }
+
+        // Set server as busy
+        await admin.database().ref('serverStatus').set({ busy: true });
+
         console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
 
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -1268,7 +1279,8 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         let userEarnings = 0;
         let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
-        let chance = 0; // We'll store the used chance here
+        let chance = 0;
+        const userPosition = nextPosition; // Save current position for user
 
         if (nextPosition % 2 !== 0) {
             updatedLoses += 1;
@@ -1278,21 +1290,18 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         // Check if the user has reached 5 losses and paid at least 20000
         if (updatedLoses === 5 && paidAmount >= 20000) {
-            // Special condition met: grant 100% of pool balance directly to the user
             userEarnings = poolBalance;
-            poolBalance = 0; // Pool balance is emptied after the user wins
-            nextPosition = 1; // Reset the position after a win
-            updatedLoses = 0; // Reset losses after reward
-            chance = 100; // Treat this as 100% chance win
+            poolBalance = 0;
+            nextPosition = 1;
+            updatedLoses = 0;
+            chance = 100;
         } else {
-            // Apply the chance logic for regular cases
             chance = positionChances[nextPosition] || 0;
             if (chance > 0) {
                 userEarnings = (poolBalance * chance) / 100;
                 poolBalance -= userEarnings;
             }
 
-            // Update position only if not reset above
             nextPosition = (nextPosition % 10) + 1;
         }
 
@@ -1302,20 +1311,23 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
-            position: nextPosition,
+            position: userPosition, // Use the real position the user got
             capital: newCapital,
             earnedFromPool: newEarnedFromPool,
             loses: updatedLoses,
-            chance, // Record the actual chance used
+            chance,
             lastUpdated: Date.now()
         });
 
         await admin.database().ref('poolData').set({
             poolBalance,
             companyEarnings,
-            nextPosition,
+            nextPosition, // Save the incremented nextPosition for future user
             lastUpdated: Date.now()
         });
+
+        // Reset server status to not busy
+        await admin.database().ref('serverStatus').set({ busy: false });
 
         res.json({
             success: true,
@@ -1327,6 +1339,10 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
     } catch (error) {
         console.error('Error processing payment:', error);
+
+        // Reset server status to not busy in case of error
+        await admin.database().ref('serverStatus').set({ busy: false });
+
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
