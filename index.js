@@ -1227,6 +1227,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
+
 // Endpoint for setting the custom interest rate and handling user payments
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
@@ -1291,11 +1292,16 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             chance,  // Set user's chance
             capital: newCapital,  // Deduct the paid amount from user's capital
             earnedFromPool: newEarnedFromPool,  // Update user's total earned from the pool
-            poolBalance // Update the pool balance after payout
         });
 
         // Increment position for the next user, reset after 10
         currentPosition = (currentPosition % 10) + 1;
+
+        // Store poolBalance and companyEarnings separately
+        await admin.database().ref('poolData').set({
+            poolBalance,
+            companyEarnings
+        });
 
         res.json({
             success: true,
@@ -1310,6 +1316,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
+
 
 
 // Start the server
