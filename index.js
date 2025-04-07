@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -1229,104 +1230,89 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
-// Endpoint for setting the custom interest rate and handling user payments
+
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
 
     try {
         console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
 
-        // Fetch user data from Firebase
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
         const userData = userSnapshot.val();
 
         if (!userData) {
-            console.error('User not found:', userId);
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Validate the payment amount
         if (isNaN(paidAmount) || paidAmount <= 0) {
-            console.error('Invalid paid amount:', paidAmount);
             return res.status(400).json({ message: 'Invalid paid amount' });
         }
 
-        // Check if user has sufficient capital
         if (userData.capital < paidAmount) {
-            console.error('Insufficient capital for user:', userId, 'Available:', userData.capital, 'Needed:', paidAmount);
             return res.status(400).json({ message: 'Insufficient capital' });
         }
 
-        // Deduct the paid amount from the user's capital
         const newCapital = userData.capital - paidAmount;
 
-        // Calculate company and pool contributions (90% to the pool, 10% to company)
-        const companyShare = paidAmount * 0.10; // 10% to company
-        const poolShare = paidAmount * 0.90;    // 90% to pool
+        const poolSnapshot = await admin.database().ref('poolData').once('value');
+        const poolData = poolSnapshot.val() || {};
+        let poolBalance = poolData.poolBalance || 0;
+        let companyEarnings = poolData.companyEarnings || 0;
+        let currentPosition = poolData.currentPosition || 1;
 
-        // Update the pool balance and company earnings
+        const companyShare = paidAmount * 0.10;
+        const poolShare = paidAmount * 0.90;
+
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
-        // Get the position and chance based on the current position
         const chance = positionChances[currentPosition] || 0;
 
-        // Calculate the user's earnings based on their chance percentage
         let userEarnings = 0;
         if (chance > 0) {
-            // Calculate user's earnings as percentage of the pool balance
             userEarnings = (poolBalance * chance) / 100;
-            poolBalance -= userEarnings;  // Deduct user's earnings from the pool
+            poolBalance -= userEarnings;
         }
 
-        // Ensure earnedFromPool is a valid number, otherwise initialize it to 0
         const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
-
-        // Calculate the new total earned from pool and update user's data
         const newEarnedFromPool = currentEarnedFromPool + userEarnings;
 
-        // Determine if the user loses, based on their current position
-        let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses; // Ensure loses is a number
-if (currentPosition % 2 !== 0) {
-    updatedLoses += 1; // Increment losses if position is odd
-} else {
-    updatedLoses = 0; // Clear losses if position is even
-}
-
-
-        // Check if user has lost 5 times and if the 5th loss has a paid amount greater than or equal to 20,000
-        if (updatedLoses === 5 && paidAmount >= 20000) {
-            // Give the user 100% chance and move them to position 10
-            currentPosition = 10; // Set the position to 10
+        let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
+        if (currentPosition % 2 !== 0) {
+            updatedLoses += 1;
+        } else {
+            updatedLoses = 0;
         }
 
-        // If the user gets 100% chance and takes the whole pool balance
-        if (currentPosition === 10) {
-            // Reset the pool balance to 0 (they took everything)
-            poolBalance = 0;
+        if (updatedLoses === 5 && paidAmount >= 20000) {
+            currentPosition = 10;
+        }
 
-            // Set the next position to 1 (reset for next user)
+        if (currentPosition === 10) {
+            poolBalance = 0;
             currentPosition = 1;
         }
 
-        // Update user data in Firebase, including loses counter
+        // Update user's data, including lastUpdated timestamp
         await admin.database().ref(`users/${userId}`).update({
             userId,
-            paidAmount,  // Set the current paid amount (overwrites the previous value)
-            position: currentPosition,  // Set user's position
-            chance,  // Set user's chance
-            capital: newCapital,  // Deduct the paid amount from user's capital
-            earnedFromPool: newEarnedFromPool,  // Update user's total earned from the pool
-            loses: updatedLoses // Update the loses field based on position
+            paidAmount,
+            position: currentPosition,
+            chance,
+            capital: newCapital,
+            earnedFromPool: newEarnedFromPool,
+            loses: updatedLoses,
+            lastUpdated: Date.now()  // Add lastUpdated timestamp for user
         });
 
-        // Increment position for the next user, reset after 10
         currentPosition = (currentPosition % 10) + 1;
 
-        // Store poolBalance and companyEarnings separately
+        // Update pool data, including lastUpdated timestamp
         await admin.database().ref('poolData').set({
             poolBalance,
-            companyEarnings
+            companyEarnings,
+            currentPosition,
+            lastUpdated: Date.now()  // Add lastUpdated timestamp for pool
         });
 
         res.json({
@@ -1343,9 +1329,6 @@ if (currentPosition % 2 !== 0) {
     }
 });
 
-
-
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
