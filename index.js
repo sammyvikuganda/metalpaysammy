@@ -1277,8 +1277,11 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             poolBalance -= userEarnings;  // Deduct user's earnings from the pool
         }
 
+        // Ensure earnedFromPool is a valid number, otherwise initialize it to 0
+        const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
+
         // Calculate the new total earned from pool and update user's data
-        const newEarnedFromPool = userData.earnedFromPool + userEarnings;
+        const newEarnedFromPool = currentEarnedFromPool + userEarnings;
 
         // Update user data in Firebase
         await admin.database().ref(`users/${userId}`).update({
