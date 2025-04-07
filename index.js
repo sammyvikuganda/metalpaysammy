@@ -74,7 +74,8 @@ app.post('/api/create-user', async (req, res) => {
                 likes: 0,
                 dislikes: 0,
                 comments: []
-            }
+                },
+            loses: 0
         };
 
         await admin.database().ref(`users/${userId}`).set(userData);
@@ -1307,19 +1308,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             currentPosition = 1;
         }
 
-        // Ensure no NaN values are being set in Firebase
-        if (isNaN(newCapital) || isNaN(newEarnedFromPool) || isNaN(userEarnings) || isNaN(poolBalance) || isNaN(companyEarnings)) {
-            console.error('Invalid values detected during update', {
-                newCapital,
-                newEarnedFromPool,
-                userEarnings,
-                poolBalance,
-                companyEarnings
-            });
-            return res.status(500).json({ message: 'Invalid values detected during update' });
-        }
-
-        // Update user data in Firebase
+        // Update user data in Firebase, including loses counter
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,  // Set the current paid amount (overwrites the previous value)
@@ -1327,7 +1316,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             chance,  // Set user's chance
             capital: newCapital,  // Deduct the paid amount from user's capital
             earnedFromPool: newEarnedFromPool,  // Update user's total earned from the pool
-            loses: updatedLoses // Update loses field based on position
+            loses: updatedLoses // Update the loses field based on position
         });
 
         // Increment position for the next user, reset after 10
