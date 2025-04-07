@@ -1286,12 +1286,13 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const newEarnedFromPool = currentEarnedFromPool + userEarnings;
 
         // Determine if the user loses, based on their current position
-        let updatedLoses = userData.loses;
-        if (currentPosition % 2 !== 0) {
-            updatedLoses += 1; // Increment losses if position is odd
-        } else {
-            updatedLoses = 0; // Clear losses if position is even
-        }
+        let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses; // Ensure loses is a number
+if (currentPosition % 2 !== 0) {
+    updatedLoses += 1; // Increment losses if position is odd
+} else {
+    updatedLoses = 0; // Clear losses if position is even
+}
+
 
         // Check if user has lost 5 times and if the 5th loss has a paid amount greater than or equal to 20,000
         if (updatedLoses === 5 && paidAmount >= 20000) {
