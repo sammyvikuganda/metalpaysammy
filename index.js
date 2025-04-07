@@ -26,6 +26,31 @@ const generateTransactionId = () => {
     return `NXS${randomDigits}`; // Prepend "NXS" to the random number
 };
 
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Mock variables for the pool balance and company earnings
+let poolBalance = 0;
+let companyEarnings = 0;
+let currentPosition = 1;  // To keep track of the current position in the cycle
+
+// Chance mapping based on position
+const positionChances = {
+    1: 5,
+    3: 10,
+    5: 5,
+    7: 10,
+    9: 5,
+    2: 20,
+    4: 40,
+    6: 60,
+    8: 80,
+    10: 100
+};
+
+
 // Create a new user with a specified user ID
 app.post('/api/create-user', async (req, res) => {
     const { userId } = req.body;
@@ -1186,292 +1211,6 @@ app.post('/api/add-transaction', async (req, res) => {
     }
 });
 
-// In-memory cache for user data
-let userCache = {};
-
-
-app.post('/api/set-custom-interest-rate', async (req, res) => {
-    const { userId, customInterestRatePerHour, durationInMinutes, paidAmount } = req.body;
-
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Ensure the interest rate, duration, and paid amount are valid
-        if (isNaN(customInterestRatePerHour) || customInterestRatePerHour <= 0) {
-            return res.status(400).json({ message: 'Invalid interest rate' });
-        }
-        if (isNaN(durationInMinutes) || durationInMinutes <= 0) {
-            return res.status(400).json({ message: 'Invalid duration' });
-        }
-        if (isNaN(paidAmount) || paidAmount <= 0) {
-            return res.status(400).json({ message: 'Invalid paid amount' });
-        }
-
-        // Get user's current capital
-        const { capital } = userData;
-
-        // Calculate immediate profits using the capital
-        const immediateProfit = calculateImmediateProfit(capital, customInterestRatePerHour, durationInMinutes);
-
-        // Set capital to 0
-        const newCapital = 0;
-
-        // Add the deducted capital to the immediate profits
-        const updatedImmediateProfit = immediateProfit + capital;
-
-        // Calculate expiration time in milliseconds (convert minutes to milliseconds)
-        const customInterestExpiry = Date.now() + durationInMinutes * 60 * 1000;
-        const customInterestSetTime = Date.now();  // Store the time when custom interest is set
-
-        // Update the custom interest rate, expiration time, set time, paid amount, and immediate profit in the database
-        await admin.database().ref(`users/${userId}`).update({
-            capital: newCapital,  // Set capital to 0
-            customInterestRatePerHour,
-            customInterestExpiry,
-            customInterestSetTime,
-            paidAmount,  // Store the paid amount
-            immediateProfits: updatedImmediateProfit  // Store the updated immediate profits
-        });
-
-        res.json({ 
-            success: true, 
-            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInMinutes} minutes, paid amount: ${paidAmount}, immediate profit: ${updatedImmediateProfit}, capital set to 0` 
-        });
-    } catch (error) {
-        console.error('Error setting custom interest rate:', error);
-        res.status(500).json({ message: 'Error setting custom interest rate' });
-    }
-});
-
-// Function to calculate immediate profit based on capital, custom interest rate per hour, and duration in minutes
-function calculateImmediateProfit(capital, customInterestRatePerHour, durationInMinutes) {
-    const interestRatePerHourDecimal = customInterestRatePerHour / 100;
-    // Convert the duration from minutes to hours
-    const durationInHours = durationInMinutes / 60;
-    // Calculate the immediate profit using simple interest for the given duration
-    const immediateProfit = capital * interestRatePerHourDecimal * durationInHours;
-    return Math.round(immediateProfit * 1e10) / 1e10; // Rounded to 10 decimal places for precision
-}
-
-
-// Function to calculate growing money based on the latest capital and custom interest rate
-async function calculateGrowingMoney(userId) {
-    const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-    const { capital, growingMoney, lastUpdated, customInterestRatePerHour, customInterestExpiry, immediateProfits, paidAmount } = snapshot.val();
-    const currentTime = Date.now();
-    const elapsedSeconds = (currentTime - lastUpdated) / 1000; // Time passed in seconds
-
-    if (elapsedSeconds > 0) {
-        let interestEarned = 0;
-
-        // Check if custom interest rate is active
-        if (customInterestRatePerHour && customInterestExpiry && currentTime < customInterestExpiry) {
-            const interestRatePerHourDecimal = customInterestRatePerHour / 100;
-            const interestRatePerSecond = Math.pow(1 + interestRatePerHourDecimal, 1 / 3600) - 1;
-
-            // Calculate interest earned based on immediate profits and time elapsed
-            interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
-            const newGrowingMoney = growingMoney + interestEarned;
-
-            // Deduct from immediate profits and add to growing money
-            if (immediateProfits && immediateProfits >= interestEarned) {
-                const newImmediateProfits = immediateProfits - interestEarned;
-
-                // Update database with new growing money and immediate profits
-                await admin.database().ref(`users/${userId}`).update({
-                    growingMoney: newGrowingMoney,
-                    immediateProfits: newImmediateProfits,
-                    lastUpdated: currentTime
-                });
-
-                return newGrowingMoney;
-            } else {
-                // If insufficient immediate profits, just update growing money
-                await admin.database().ref(`users/${userId}`).update({
-                    growingMoney: newGrowingMoney,
-                    lastUpdated: currentTime
-                });
-
-                return newGrowingMoney;
-            }
-        } else {
-            // Custom interest rate has expired; transfer any remaining immediate profits to growing money
-            const newGrowingMoney = growingMoney + (immediateProfits || 0);
-
-            // Default rate of 1.44% per day if custom rate is not active
-            const dailyRate = 0.0144;  // Default daily rate (1.44%)
-            const interestRatePerSecond = Math.pow(1 + dailyRate, 1 / (24 * 60 * 60)) - 1;
-
-            // Calculate interest earned with the default rate
-            interestEarned = Math.round((capital * Math.pow(1 + interestRatePerSecond, elapsedSeconds) - capital) * 1e10) / 1e10;
-            const finalGrowingMoney = newGrowingMoney + interestEarned;
-
-            // Clear expired custom interest rate and expiry time, set immediate profits and paid amount to zero
-            await admin.database().ref(`users/${userId}`).update({
-                customInterestRatePerHour: null,
-                customInterestExpiry: null,
-                paidAmount: null,  // Clear the paid amount
-                growingMoney: finalGrowingMoney,
-                immediateProfits: 0,
-                lastUpdated: currentTime
-            });
-
-            return finalGrowingMoney;
-        }
-    }
-
-    return growingMoney; // If no time has passed, return current growing money
-}
-
-
-
-
-
-
-
-// Endpoint to fetch custom interest rate details for a specific user
-app.get('/api/get-custom-interest-rate/:userId', async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const { customInterestRatePerHour, customInterestSetTime, customInterestExpiry, paidAmount } = userData;
-
-        // If custom interest rate is not set, return a message
-        if (!customInterestRatePerHour || !customInterestSetTime || !customInterestExpiry) {
-            return res.status(404).json({ message: 'No custom interest rate set for this user' });
-        }
-
-        res.json({
-            customInterestRatePerHour,
-            customInterestSetTime,
-            customInterestExpiry,
-            paidAmount  // Include the paid amount in the response
-        });
-    } catch (error) {
-        console.error('Error fetching custom interest rate:', error);
-        res.status(500).json({ message: 'Error fetching custom interest rate' });
-    }
-});
-
-
-
-
-
-
-// Update capital and growing money immediately
-app.post('/api/update-capital', async (req, res) => {
-    const { userId, newCapital } = req.body;
-    try {
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        const currentTime = Date.now();
-
-        await admin.database().ref(`users/${userId}`).update({
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        });
-
-        userCache[userId] = {
-            capital: newCapital,
-            growingMoney: newGrowingMoney,
-            lastUpdated: currentTime
-        };
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error updating capital:', error);
-        res.status(500).json({ message: 'Error updating capital' });
-    }
-});
-
-// Endpoint to reset growing money to 0
-app.post('/api/reset-growing-money', async (req, res) => {
-    const { userId } = req.body;
-    try {
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        await admin.database().ref(`users/${userId}`).update({
-            growingMoney: 0,
-            lastUpdated: Date.now()
-        });
-
-        userCache[userId] = {
-            capital: userData.capital,
-            growingMoney: 0,
-            lastUpdated: Date.now()
-        };
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error resetting growing money:', error);
-        res.status(500).json({ message: 'Error resetting growing money' });
-    }
-});
-
-// Batch process to update all users' growing money daily at 12:50 PM
-cron.schedule('50 12 * * *', async () => {
-    try {
-        console.log('Updating growing money for all users...');
-        const snapshot = await admin.database().ref('users').once('value');
-        const users = snapshot.val();
-
-        if (users) {
-            const updates = {};
-            for (const userId in users) {
-                const newGrowingMoney = await calculateGrowingMoney(userId);
-                updates[`users/${userId}/growingMoney`] = newGrowingMoney;
-                updates[`users/${userId}/lastUpdated`] = Date.now();
-            }
-            await admin.database().ref().update(updates);
-            console.log('Update successful for all users.');
-        }
-    } catch (error) {
-        console.error('Error updating all users\' growing money:', error);
-    }
-});
-
-// Fetch the updated capital
-app.get('/api/earnings/capital/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const snapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const user = snapshot.val();
-        const capital = user ? user.capital : 0;
-        res.json({ capital });
-    } catch (error) {
-        console.error('Error fetching current capital:', error);
-        res.status(500).json({ message: 'Error fetching current capital' });
-    }
-});
-
-// Fetch the updated growing money
-app.get('/api/earnings/growing-money/:userId', async (req, res) => {
-    const { userId } = req.params;
-    try {
-        const newGrowingMoney = await calculateGrowingMoney(userId);
-        res.json({ growingMoney: newGrowingMoney });
-    } catch (error) {
-        console.error('Error fetching growing money:', error);
-        res.status(500).json({ message: 'Error fetching growing money' });
-    }
-});
 
 // Fetch the transaction history for a user
 app.get('/api/transaction-history/:userId', async (req, res) => {
@@ -1484,6 +1223,92 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
         console.error('Error fetching transaction history:', error);
         res.status(500).json({ message: 'Error fetching transaction history' });
     }
+});
+
+
+
+// Endpoint for setting the custom interest rate and handling user payments
+app.post('/api/set-custom-interest-rate', async (req, res) => {
+    const { userId, paidAmount } = req.body;
+
+    try {
+        // Fetch user data from Firebase (Replace with your actual Firebase DB path)
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Validate the payment amount
+        if (isNaN(paidAmount) || paidAmount <= 0) {
+            return res.status(400).json({ message: 'Invalid paid amount' });
+        }
+
+        // Check if user has sufficient capital
+        if (userData.capital < paidAmount) {
+            return res.status(400).json({ message: 'Insufficient capital' });
+        }
+
+        // Deduct the paid amount from the user's capital
+        const newCapital = userData.capital - paidAmount;
+
+        // Calculate company and pool contributions (90% to the pool, 10% to company)
+        const companyShare = paidAmount * 0.10; // 10% to company
+        const poolShare = paidAmount * 0.90;    // 90% to pool
+
+        // Update the pool balance and company earnings
+        poolBalance += poolShare;
+        companyEarnings += companyShare;
+
+        // Get the position and chance based on the current position
+        const chance = positionChances[currentPosition] || 0;
+
+        // Calculate the user's earnings based on their chance percentage
+        let userEarnings = 0;
+        if (chance > 0) {
+            // Calculate user's earnings as percentage of the pool balance
+            userEarnings = (poolBalance * chance) / 100;
+            poolBalance -= userEarnings;  // Deduct user's earnings from the pool
+        }
+
+        // Calculate the new total earned from pool and update user's data
+        const newEarnedFromPool = userData.earnedFromPool + userEarnings;
+
+        // Update user data in Firebase
+        await admin.database().ref(`users/${userId}`).update({
+            userId,
+            paidAmount,  // Set the current paid amount (overwrites the previous value)
+            position: currentPosition,  // Set user's position
+            chance,  // Set user's chance
+            capital: newCapital,  // Deduct the paid amount from user's capital
+            earnedFromPool: newEarnedFromPool,  // Update user's total earned from the pool
+            poolBalance // Update the pool balance after payout
+        });
+
+        // Increment position for the next user, reset after 10
+        currentPosition = (currentPosition % 10) + 1;
+
+        res.json({
+            success: true,
+            message: `User ${userId} processed.`,
+            userEarnings,
+            poolBalance,
+            companyEarnings
+        });
+
+    } catch (error) {
+        console.error('Error processing user payment:', error);
+        res.status(500).json({ message: 'Error processing payment' });
+    }
+});
+
+// Endpoint to check current pool and company earnings
+app.get('/api/status', (req, res) => {
+    res.json({
+        poolBalance,
+        companyEarnings
+    });
 });
 
 // Start the server
