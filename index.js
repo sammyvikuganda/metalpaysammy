@@ -1284,6 +1284,29 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         // Calculate the new total earned from pool and update user's data
         const newEarnedFromPool = currentEarnedFromPool + userEarnings;
 
+        // Determine if the user loses, based on their current position
+        let updatedLoses = userData.loses;
+        if (currentPosition % 2 !== 0) {
+            updatedLoses += 1; // Increment losses if position is odd
+        } else {
+            updatedLoses = 0; // Clear losses if position is even
+        }
+
+        // Check if user has lost 5 times and if the 5th loss has a paid amount greater than or equal to 20,000
+        if (updatedLoses === 5 && paidAmount >= 20000) {
+            // Give the user 100% chance and move them to position 10
+            currentPosition = 10; // Set the position to 10
+        }
+
+        // If the user gets 100% chance and takes the whole pool balance
+        if (currentPosition === 10) {
+            // Reset the pool balance to 0 (they took everything)
+            poolBalance = 0;
+
+            // Set the next position to 1 (reset for next user)
+            currentPosition = 1;
+        }
+
         // Update user data in Firebase
         await admin.database().ref(`users/${userId}`).update({
             userId,
@@ -1292,6 +1315,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             chance,  // Set user's chance
             capital: newCapital,  // Deduct the paid amount from user's capital
             earnedFromPool: newEarnedFromPool,  // Update user's total earned from the pool
+            loses: updatedLoses // Update loses field based on position
         });
 
         // Increment position for the next user, reset after 10
