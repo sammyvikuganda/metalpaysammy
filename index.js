@@ -1191,7 +1191,7 @@ let userCache = {};
 
 
 app.post('/api/set-custom-interest-rate', async (req, res) => {
-    const { userId, customInterestRatePerHour, durationInHours, paidAmount } = req.body;
+    const { userId, customInterestRatePerHour, durationInMinutes, paidAmount } = req.body;
 
     try {
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
@@ -1205,7 +1205,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         if (isNaN(customInterestRatePerHour) || customInterestRatePerHour <= 0) {
             return res.status(400).json({ message: 'Invalid interest rate' });
         }
-        if (isNaN(durationInHours) || durationInHours <= 0) {
+        if (isNaN(durationInMinutes) || durationInMinutes <= 0) {
             return res.status(400).json({ message: 'Invalid duration' });
         }
         if (isNaN(paidAmount) || paidAmount <= 0) {
@@ -1216,7 +1216,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const { capital } = userData;
 
         // Calculate immediate profits using the capital
-        const immediateProfit = calculateImmediateProfit(capital, customInterestRatePerHour, durationInHours);
+        const immediateProfit = calculateImmediateProfit(capital, customInterestRatePerHour, durationInMinutes);
 
         // Set capital to 0
         const newCapital = 0;
@@ -1224,8 +1224,8 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         // Add the deducted capital to the immediate profits
         const updatedImmediateProfit = immediateProfit + capital;
 
-        // Calculate expiration time in milliseconds
-        const customInterestExpiry = Date.now() + durationInHours * 60 * 60 * 1000;
+        // Calculate expiration time in milliseconds (convert minutes to milliseconds)
+        const customInterestExpiry = Date.now() + durationInMinutes * 60 * 1000;
         const customInterestSetTime = Date.now();  // Store the time when custom interest is set
 
         // Update the custom interest rate, expiration time, set time, paid amount, and immediate profit in the database
@@ -1240,7 +1240,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         res.json({ 
             success: true, 
-            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInHours} hours, paid amount: ${paidAmount}, immediate profit: ${updatedImmediateProfit}, capital set to 0` 
+            message: `Custom interest rate set to ${customInterestRatePerHour}% per hour for user ${userId} for ${durationInMinutes} minutes, paid amount: ${paidAmount}, immediate profit: ${updatedImmediateProfit}, capital set to 0` 
         });
     } catch (error) {
         console.error('Error setting custom interest rate:', error);
@@ -1248,15 +1248,15 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
     }
 });
 
-// Function to calculate immediate profit based on capital, custom interest rate per hour, and duration
-function calculateImmediateProfit(capital, customInterestRatePerHour, durationInHours) {
+// Function to calculate immediate profit based on capital, custom interest rate per hour, and duration in minutes
+function calculateImmediateProfit(capital, customInterestRatePerHour, durationInMinutes) {
     const interestRatePerHourDecimal = customInterestRatePerHour / 100;
+    // Convert the duration from minutes to hours
+    const durationInHours = durationInMinutes / 60;
     // Calculate the immediate profit using simple interest for the given duration
     const immediateProfit = capital * interestRatePerHourDecimal * durationInHours;
     return Math.round(immediateProfit * 1e10) / 1e10; // Rounded to 10 decimal places for precision
 }
-
-
 
 
 // Function to calculate growing money based on the latest capital and custom interest rate
