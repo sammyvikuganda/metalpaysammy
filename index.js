@@ -1329,6 +1329,107 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
     }
 });
 
+
+
+// Endpoint for setting the custom interest rate and handling user payments
+app.post('/api/set-custom-interest-rate', async (req, res) => {
+    const { userId, paidAmount } = req.body;
+
+    try {
+        console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
+
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (isNaN(paidAmount) || paidAmount <= 0) {
+            return res.status(400).json({ message: 'Invalid paid amount' });
+        }
+
+        if (userData.capital < paidAmount) {
+            return res.status(400).json({ message: 'Insufficient capital' });
+        }
+
+        const newCapital = userData.capital - paidAmount;
+
+        const poolSnapshot = await admin.database().ref('poolData').once('value');
+        const poolData = poolSnapshot.val() || {};
+        let poolBalance = poolData.poolBalance || 0;
+        let companyEarnings = poolData.companyEarnings || 0;
+        let nextPosition = poolData.nextPosition || 1;
+
+        const companyShare = paidAmount * 0.10;
+        const poolShare = paidAmount * 0.90;
+
+        poolBalance += poolShare;
+        companyEarnings += companyShare;
+
+        let chance = positionChances[nextPosition] || 0;
+        let userEarnings = 0;
+
+        let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
+
+        if (nextPosition % 2 !== 0) {
+            updatedLoses += 1;
+        } else {
+            updatedLoses = 0;
+        }
+
+        if (updatedLoses === 5 && paidAmount >= 20000) {
+            // Special condition met: grant 100% of pool balance
+            userEarnings = poolBalance;
+            poolBalance = 0;
+            chance = 100;
+            nextPosition = 1; // reset after full win
+            updatedLoses = 0; // reset losses after reward
+        } else {
+            if (chance > 0) {
+                userEarnings = (poolBalance * chance) / 100;
+                poolBalance -= userEarnings;
+            }
+
+            // update position only if not reset above
+            nextPosition = (nextPosition % 10) + 1;
+        }
+
+        const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
+        const newEarnedFromPool = currentEarnedFromPool + userEarnings;
+
+        await admin.database().ref(`users/${userId}`).update({
+            userId,
+            paidAmount,
+            position: nextPosition,
+            chance,
+            capital: newCapital,
+            earnedFromPool: newEarnedFromPool,
+            loses: updatedLoses,
+            lastUpdated: Date.now()
+        });
+
+        await admin.database().ref('poolData').set({
+            poolBalance,
+            companyEarnings,
+            nextPosition,
+            lastUpdated: Date.now()
+        });
+
+        res.json({
+            success: true,
+            message: `User ${userId} processed.`,
+            userEarnings,
+            poolBalance,
+            companyEarnings
+        });
+
+    } catch (error) {
+        console.error('Error processing payment:', error);
+        res.status(500).json({ message: 'Error processing payment', error: error.message });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
