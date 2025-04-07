@@ -1232,21 +1232,26 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
 
     try {
+        console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
+
         // Fetch user data from Firebase (Replace with your actual Firebase DB path)
         const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
         const userData = userSnapshot.val();
 
         if (!userData) {
+            console.error('User not found:', userId);
             return res.status(404).json({ message: 'User not found' });
         }
 
         // Validate the payment amount
         if (isNaN(paidAmount) || paidAmount <= 0) {
+            console.error('Invalid paid amount:', paidAmount);
             return res.status(400).json({ message: 'Invalid paid amount' });
         }
 
         // Check if user has sufficient capital
         if (userData.capital < paidAmount) {
+            console.error('Insufficient capital for user:', userId, 'Available:', userData.capital, 'Needed:', paidAmount);
             return res.status(400).json({ message: 'Insufficient capital' });
         }
 
@@ -1298,18 +1303,11 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error processing user payment:', error);
-        res.status(500).json({ message: 'Error processing payment' });
+        console.error('Error processing payment:', error);
+        res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
 
-// Endpoint to check current pool and company earnings
-app.get('/api/status', (req, res) => {
-    res.json({
-        poolBalance,
-        companyEarnings
-    });
-});
 
 // Start the server
 app.listen(PORT, () => {
