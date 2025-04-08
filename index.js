@@ -1231,7 +1231,6 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
-
 // Endpoint for setting the custom interest rate and handling user payments
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
@@ -1337,6 +1336,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
         const newEarnedFromPool = currentEarnedFromPool + userEarnings;
 
+        // Update user data without lastUpdated
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
@@ -1346,14 +1346,17 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             loses: updatedLoses,
             downgradeLosses, // Track downgrade losses
             chance,
-            lastUpdated: Date.now()
         });
 
-        await admin.database().ref('poolData').set({
+        // **Track earnings in poolData**
+        const userEarningsData = poolData.userEarnings || [];
+        userEarningsData.push({ userId, earnedAmount: userEarnings });
+timestamp: Date.now()
+        await admin.database().ref('poolData').update({
             poolBalance,
             companyEarnings,
             nextPosition, // Save the incremented nextPosition for future user
-            lastUpdated: Date.now()
+            userEarnings: userEarningsData, // Add the user's earnings and userId to pool data
         });
 
         // Reset server status to not busy
@@ -1376,7 +1379,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
-
 
 
 
