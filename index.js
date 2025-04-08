@@ -31,10 +31,7 @@ const generateTransactionId = () => {
 app.use(cors());
 app.use(express.json());
 
-// Mock variables for the pool balance and company earnings
-let poolBalance = 0;
-let companyEarnings = 0;
-let currentPosition = 1;  // To keep track of the current position in the cycle
+
 
 // Chance mapping based on position
  const positionChances = {
