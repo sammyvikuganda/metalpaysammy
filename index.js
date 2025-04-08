@@ -1272,9 +1272,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const companyShare = paidAmount * 0.10;
         const poolShare = paidAmount * 0.90;
 
-const initialPoolBalance = poolBalance;  // Save the initial pool balance for comparison
-
-
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
@@ -1284,19 +1281,26 @@ const initialPoolBalance = poolBalance;  // Save the initial pool balance for co
 
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
 
-        // **Updated logic: Advance to next position if paidAmount is equal or higher than half of the initial pool balance**
-if (paidAmount >= initialPoolBalance / 2) {
-    console.log(`User ${userId} paid an amount higher than or equal to half of the initial pool balance. Advancing to the next position.`);
-    nextPosition = (nextPosition % 10) + 1; // Simply advance the position
-} else {
-    // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the initial pool balance
-    if (nextPosition % 2 === 0 && paidAmount < initialPoolBalance / 2) {
-        console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
-        nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
-        downgradeLosses += 1; // Track the downgrade loss
-    }
-}
+        // **New: Save the old pool balance in the database**
+        const oldPoolBalance = poolBalance - poolShare; // This is the pool balance before the new payment
 
+        // Save the old pool balance to the database for comparison later
+        await admin.database().ref('poolData').update({
+            oldPoolBalance
+        });
+
+        // **New logic: Advance to the next position if the paid amount is half or more of the old pool balance**
+        if (paidAmount >= oldPoolBalance / 2) {
+            console.log(`User ${userId} paid an amount higher than or equal to half of the old pool balance. Advancing to the next position.`);
+            nextPosition = (nextPosition % 10) + 1; // Simply advance the position
+        } else {
+            // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the old pool balance
+            if (nextPosition % 2 === 0 && paidAmount < oldPoolBalance / 2) {
+                console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
+                nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
+                downgradeLosses += 1; // Track the downgrade loss
+            }
+        }
 
         // **Changed: Check if the user has reached 2 downgrade losses**
         if (downgradeLosses === 2) {
@@ -1346,7 +1350,6 @@ if (paidAmount >= initialPoolBalance / 2) {
             loses: updatedLoses,
             downgradeLosses, // Track downgrade losses
             chance
-            
         });
 
         // Add user earnings and timestamp to poolData
@@ -1385,6 +1388,7 @@ if (paidAmount >= initialPoolBalance / 2) {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
+
 
 
 
