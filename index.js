@@ -1282,11 +1282,11 @@ const originalPoolBalance = poolBalance;
 
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
 
-        // **New logic: Advance to next position if paidAmount is at least half of the original pool balance**
+        // New logic: Advance to next position if paidAmount is at least half of the original pool balance
 if (paidAmount >= originalPoolBalance / 2) {
-    console.log(`User ${userId} paid at least half of the original pool balance (${originalPoolBalance}). Advancing to the next position.`);
-    // Ensure to increment within the 1-10 cycle (without skipping)
-    nextPosition = nextPosition === 10 ? 1 : nextPosition + 1; // If at 10, go back to 1
+    console.log(`User ${userId} paid at least half of the original pool balance (${originalPoolBalance}). Staying at position ${nextPosition}.`);
+    // Ensure the position is updated to the next, but it doesn't skip over even positions
+    nextPosition = (nextPosition % 10) + 1; // Increment position within the 1-10 cycle
 } else {
     // Downgrade logic for even positions (2, 4, 6, 8, 10) if the paid amount is below half of the original pool balance
     if (nextPosition % 2 === 0) {
