@@ -44,11 +44,11 @@ const positionChances = {
     5: 5,
     7: 10,
     9: 5,
-    2: 20,
-    4: 40,
-    6: 60,
-    8: 80,
-    10: 100
+    2: 15,
+    4: 30,
+    6: 50,
+    8: 60,
+    10: 70
 };
 
 
@@ -1280,7 +1280,14 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         let userEarnings = 0;
         let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
         let chance = 0;
-        const userPosition = nextPosition; // Save current position for user
+
+        // Downgrade logic added here without changing the original position value
+        if ((nextPosition === 8 || nextPosition === 10) && paidAmount < poolBalance / 2) {
+            console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
+            nextPosition -= 1;
+        }
+
+        const userPosition = nextPosition; // Save current position after potential downgrade
 
         if (nextPosition % 2 !== 0) {
             updatedLoses += 1;
@@ -1311,7 +1318,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
-            position: userPosition, // Use the real position the user got
+            position: userPosition, // Use the final position (after downgrade if any)
             capital: newCapital,
             earnedFromPool: newEarnedFromPool,
             loses: updatedLoses,
