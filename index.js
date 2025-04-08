@@ -38,7 +38,7 @@ let companyEarnings = 0;
 let currentPosition = 1;  // To keep track of the current position in the cycle
 
 // Chance mapping based on position
-const positionChances = {
+ const positionChances = {
     1: 5,
     3: 10,
     5: 5,
@@ -48,8 +48,11 @@ const positionChances = {
     4: 30,
     6: 50,
     8: 60,
-    10: 70
+    10: 70,
+    12: 5,
+    14: 10
 };
+
 
 
 // Create a new user with a specified user ID
@@ -1281,10 +1284,23 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
         let chance = 0;
 
-        // Downgrade logic added here without changing the original position value
-        if ((nextPosition === 8 || nextPosition === 10) && paidAmount < poolBalance / 2) {
+        let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
+
+        // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the pool balance
+        if (nextPosition % 2 === 0 && paidAmount < poolBalance / 2) {
             console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
-            nextPosition -= 1;
+            nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
+            downgradeLosses += 1; // Track the downgrade loss
+        }
+
+        // **Changed: Check if the user has reached 2 downgrade losses**
+        if (downgradeLosses === 2) {
+            // Assign position 12 or 14 if downgrade losses are 2
+            const newPosition = Math.random() < 0.5 ? 12 : 14; // Randomly assign position 12 or 14
+            nextPosition = newPosition;
+            chance = positionChances[nextPosition] || 0;  // Use the chance of the assigned position
+            console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition} with chance ${chance}.`);
+            downgradeLosses = 0; // Reset downgrade losses after assigning position 12 or 14
         }
 
         const userPosition = nextPosition; // Save current position after potential downgrade
@@ -1299,7 +1315,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         if (updatedLoses === 5 && paidAmount >= 20000) {
             userEarnings = poolBalance;
             poolBalance = 0;
-            nextPosition = 1;
+            nextPosition = 1;  // Reset position to 1 after user earnings all pool balance
             updatedLoses = 0;
             chance = 100;
         } else {
@@ -1309,6 +1325,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
                 poolBalance -= userEarnings;
             }
 
+            // Increment position for next round in the normal 1-10 cycle
             nextPosition = (nextPosition % 10) + 1;
         }
 
@@ -1322,6 +1339,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             capital: newCapital,
             earnedFromPool: newEarnedFromPool,
             loses: updatedLoses,
+            downgradeLosses, // Track downgrade losses
             chance,
             lastUpdated: Date.now()
         });
