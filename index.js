@@ -1336,23 +1336,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
         const newEarnedFromPool = currentEarnedFromPool + userEarnings;
 
-
-
-// **New: Add earned info to poolData with timestamp**
-const timestamp = Date.now(); // Get current timestamp
-const earningsRecord = {
-    userId,
-    earnedAmount: userEarnings,
-    timestamp
-};
-
-// Push this record to an array in poolData
-const poolEarningsRef = admin.database().ref('poolData/earningsHistory');
-await poolEarningsRef.push(earningsRecord);
-
-
-
-
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
@@ -1365,11 +1348,20 @@ await poolEarningsRef.push(earningsRecord);
             
         });
 
+        // Add user earnings and timestamp to poolData
+        const userEarningsData = poolData.userEarningsData || [];
+        userEarningsData.push({
+            userId,
+            earnedAmount: userEarnings,
+            timestamp: Date.now()  // Add timestamp of the earning
+        });
+
+        // Update poolData
         await admin.database().ref('poolData').set({
             poolBalance,
             companyEarnings,
-            nextPosition
-            
+            nextPosition,
+            userEarningsData  // Add the new data to poolData
         });
 
         // Reset server status to not busy
