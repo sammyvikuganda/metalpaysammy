@@ -1285,16 +1285,18 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
 
-        // Modified downgrade logic: downgrade only if payment is below half the pool balance
-if (nextPosition % 2 === 0) {
-    if (paidAmount < poolBalance / 2) {
-        console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
-        nextPosition -= 1;  // Downgrade position by 1
-        downgradeLosses += 1;
-    } else {
-        console.log(`User ${userId} paid half or more of pool balance. No downgrade. Proceeding to next position.`);
-    }
-}
+        // **New logic: Advance to next position if paidAmount is equal or higher than pool balance**
+        if (paidAmount >= poolBalance) {
+            console.log(`User ${userId} paid an amount higher than or equal to the pool balance. Advancing to the next position.`);
+            nextPosition = (nextPosition % 10) + 1; // Simply advance the position
+        } else {
+            // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the pool balance
+            if (nextPosition % 2 === 0 && paidAmount < poolBalance / 2) {
+                console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
+                nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
+                downgradeLosses += 1; // Track the downgrade loss
+            }
+        }
 
         // **Changed: Check if the user has reached 2 downgrade losses**
         if (downgradeLosses === 2) {
