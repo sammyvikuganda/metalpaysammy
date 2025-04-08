@@ -1228,6 +1228,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
+
 // Endpoint for setting the custom interest rate and handling user payments
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
@@ -1292,7 +1293,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         // **New logic: Advance to the next position if the paid amount is half or more of the old pool balance**
         if (paidAmount >= oldPoolBalance / 2) {
             console.log(`User ${userId} paid an amount higher than or equal to half of the old pool balance. Advancing to the next position.`);
-            nextPosition = (nextPosition % 10) + 1; // Simply advance the position
+            nextPosition = (nextPosition % 10) + 1; // Simply advance the position in the cycle
         } else {
             // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the old pool balance
             if (nextPosition % 2 === 0 && paidAmount < oldPoolBalance / 2) {
@@ -1335,7 +1336,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             }
 
             // Increment position for next round in the normal 1-10 cycle
-            nextPosition = (nextPosition % 10) + 1;
+            nextPosition = (nextPosition % 10) + 1; // Correct cycle after each update
         }
 
         const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
@@ -1388,7 +1389,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
-
 
 
 
