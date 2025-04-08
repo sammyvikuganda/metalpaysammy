@@ -1285,7 +1285,8 @@ const originalPoolBalance = poolBalance;
         // **New logic: Advance to next position if paidAmount is at least half of the original pool balance**
 if (paidAmount >= originalPoolBalance / 2) {
     console.log(`User ${userId} paid at least half of the original pool balance (${originalPoolBalance}). Advancing to the next position.`);
-    nextPosition = (nextPosition % 10) + 1; // Ensure it advances in the 1-10 cycle
+    // Ensure to increment within the 1-10 cycle (without skipping)
+    nextPosition = nextPosition === 10 ? 1 : nextPosition + 1; // If at 10, go back to 1
 } else {
     // Downgrade logic for even positions (2, 4, 6, 8, 10) if the paid amount is below half of the original pool balance
     if (nextPosition % 2 === 0) {
@@ -1294,6 +1295,7 @@ if (paidAmount >= originalPoolBalance / 2) {
         downgradeLosses += 1; // Track the downgrade loss
     }
 }
+
 
 
         // **Changed: Check if the user has reached 2 downgrade losses**
