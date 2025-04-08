@@ -1272,6 +1272,9 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const companyShare = paidAmount * 0.10;
         const poolShare = paidAmount * 0.90;
 
+const initialPoolBalance = poolBalance;  // Save the initial pool balance for comparison
+
+
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
@@ -1281,18 +1284,19 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
 
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
 
-        // **New logic: Advance to next position if paidAmount is equal or higher than pool balance**
-        if (paidAmount >= poolBalance) {
-            console.log(`User ${userId} paid an amount higher than or equal to the pool balance. Advancing to the next position.`);
-            nextPosition = (nextPosition % 10) + 1; // Simply advance the position
-        } else {
-            // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the pool balance
-            if (nextPosition % 2 === 0 && paidAmount < poolBalance / 2) {
-                console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
-                nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
-                downgradeLosses += 1; // Track the downgrade loss
-            }
-        }
+        // **Updated logic: Advance to next position if paidAmount is equal or higher than half of the initial pool balance**
+if (paidAmount >= initialPoolBalance / 2) {
+    console.log(`User ${userId} paid an amount higher than or equal to half of the initial pool balance. Advancing to the next position.`);
+    nextPosition = (nextPosition % 10) + 1; // Simply advance the position
+} else {
+    // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the initial pool balance
+    if (nextPosition % 2 === 0 && paidAmount < initialPoolBalance / 2) {
+        console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
+        nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
+        downgradeLosses += 1; // Track the downgrade loss
+    }
+}
+
 
         // **Changed: Check if the user has reached 2 downgrade losses**
         if (downgradeLosses === 2) {
