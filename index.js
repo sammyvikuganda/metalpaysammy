@@ -1228,12 +1228,12 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
-
 // Endpoint for setting the custom interest rate and handling user payments
-  app.post('/api/set-custom-interest-rate', async (req, res) => {
+app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
 
     try {
+        // Check if the server is busy
         const serverStatusSnapshot = await admin.database().ref('serverStatus').once('value');
         const serverStatus = serverStatusSnapshot.val() || {};
 
@@ -1241,6 +1241,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             return res.status(503).json({ message: 'Server is busy, please try again later.' });
         }
 
+        // Set server as busy
         await admin.database().ref('serverStatus').set({ busy: true });
 
         console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
@@ -1271,37 +1272,33 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
         const companyShare = paidAmount * 0.10;
         const poolShare = paidAmount * 0.90;
 
-        poolBalance += poolShare;
-        companyEarnings += companyShare;
-
         let userEarnings = 0;
         let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
         let chance = 0;
 
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
 
-        // Custom comparison logic
-        if (paidAmount >= poolBalance / 2) {
-            // Rewarded path
-            if (nextPosition % 2 === 0) {
-                console.log(`User ${userId} paid >= half the pool and next position ${nextPosition} is even. Proceed normally.`);
-                // Continue cycle
-            } else {
-                console.log(`User ${userId} paid >= half but position ${nextPosition} is odd. Proceed anyway.`);
-            }
+        // **1. Compare paidAmount with poolBalance**
+        const isAtLeastHalf = paidAmount >= (poolBalance / 2);
+
+        // **2. Assign position based on comparison**
+        if (isAtLeastHalf) {
+            console.log(`User ${userId} paid an amount higher than or equal to half of the pool balance. Advancing to the next position.`);
+            nextPosition = (nextPosition % 10) + 1;  // Advance to next position
         } else {
-            // Still reward but downgrade
-            console.log(`User ${userId} paid < half the pool. Downgrading from position ${nextPosition}.`);
-            nextPosition = Math.max(1, nextPosition - 1); // Prevent going below 1
-            downgradeLosses += 1;
+            if (nextPosition % 2 === 0) {
+                console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
+                nextPosition -= 1;  // Downgrade position by 1 (for even positions)
+                downgradeLosses += 1;  // Track downgrade loss
+            }
         }
 
+        // **3. Handle downgrade losses and reassign positions if necessary**
         if (downgradeLosses === 2) {
-            const newPosition = Math.random() < 0.5 ? 12 : 14;
-            nextPosition = newPosition;
-            chance = positionChances[nextPosition] || 0;
+            nextPosition = Math.random() < 0.5 ? 12 : 14;  // Assign position 12 or 14
+            chance = positionChances[nextPosition] || 0;  // Use the chance of the assigned position
+            downgradeLosses = 0;  // Reset downgrade losses
             console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition} with chance ${chance}.`);
-            downgradeLosses = 0;
         }
 
         const userPosition = nextPosition;
@@ -1312,10 +1309,15 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             updatedLoses = 0;
         }
 
+        // **4. Add 90% to the pool balance**
+        poolBalance += poolShare;
+        companyEarnings += companyShare;
+
+        // **5. Payout logic**
         if (updatedLoses === 5 && paidAmount >= 20000) {
             userEarnings = poolBalance;
             poolBalance = 0;
-            nextPosition = 1;
+            nextPosition = 1;  // Reset position to 1 after user earns all pool balance
             updatedLoses = 0;
             chance = 100;
         } else {
@@ -1325,16 +1327,18 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
                 poolBalance -= userEarnings;
             }
 
+            // Increment position for the next round (1-10 cycle)
             nextPosition = (nextPosition % 10) + 1;
         }
 
         const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
         const newEarnedFromPool = currentEarnedFromPool + userEarnings;
 
+        // Update user data with the final information
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
-            position: userPosition,
+            position: userPosition,  // Final position after possible downgrade
             capital: newCapital,
             earnedFromPool: newEarnedFromPool,
             loses: updatedLoses,
@@ -1342,13 +1346,15 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             chance
         });
 
+        // Log user earnings and timestamp to poolData
         const userEarningsData = poolData.userEarningsData || [];
         userEarningsData.push({
             userId,
             earnedAmount: userEarnings,
-            timestamp: Date.now()
+            timestamp: Date.now()  // Add timestamp of the earning
         });
 
+        // Update poolData
         await admin.database().ref('poolData').set({
             poolBalance,
             companyEarnings,
@@ -1356,6 +1362,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             userEarningsData
         });
 
+        // Reset server status to not busy
         await admin.database().ref('serverStatus').set({ busy: false });
 
         res.json({
@@ -1368,7 +1375,10 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
     } catch (error) {
         console.error('Error processing payment:', error);
+
+        // Reset server status to not busy in case of error
         await admin.database().ref('serverStatus').set({ busy: false });
+
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
