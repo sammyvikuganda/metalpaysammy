@@ -1396,7 +1396,10 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
-        // **Remove earnedFromPool field and instead add the earned amount to capital directly**
+        // Calculate the user's earnings after the 90% is added to the pool
+        const userEarnings = (poolBalance * chance) / 100;
+
+        // Add user earnings directly to the capital
         const newCapitalAfterEarnings = newCapital + userEarnings;
 
         await admin.database().ref(`users/${userId}`).update({
@@ -1445,6 +1448,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
+
 
 
 app.listen(PORT, () => {
