@@ -1279,9 +1279,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         // **New logic: Compare paid amount with pool balance BEFORE adding 90% to the pool**
         if (paidAmount >= poolBalance / 2) {  // Check if paid amount is half or more of pool balance
             console.log(`User ${userId} paid an amount equal to or greater than half of the pool balance. Continuing cycle.`);
-
-            // Proceed to next position in the cycle
-            nextPosition = (nextPosition % 10) + 1;
         } else {
             // Downgrade logic for all even positions (2, 4, 6, 8, 10) if paid amount is below half of pool balance
             if (nextPosition % 2 === 0 && paidAmount < poolBalance / 2) {
@@ -1291,18 +1288,18 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             }
         }
 
-        // **Changed: Check if the user has reached 2 downgrade losses**
+        // **Check if the user has reached 2 downgrade losses**
         if (downgradeLosses === 2) {
-            // Assign position 12 or 14 if downgrade losses are 2
-            const newPosition = Math.random() < 0.5 ? 12 : 14; // Randomly assign position 12 or 14
+            // If downgrade losses are 2, assign position 12 or 14 randomly
+            const newPosition = Math.random() < 0.5 ? 12 : 14;
             nextPosition = newPosition;
-            chance = positionChances[nextPosition] || 0;  // Use the chance of the assigned position
-            console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition} with chance ${chance}.`);
-            downgradeLosses = 0; // Reset downgrade losses after assigning position 12 or 14
+            console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition}.`);
+            downgradeLosses = 0;  // Reset downgrade losses after assigning position 12 or 14
         }
 
         const userPosition = nextPosition; // Save current position after potential downgrade
 
+        // Increment loss counter based on odd/even position
         if (nextPosition % 2 !== 0) {
             updatedLoses += 1;
         } else {
@@ -1323,8 +1320,8 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
                 poolBalance -= userEarnings;
             }
 
-            // Increment position for next round in the normal 1-10 cycle
-            nextPosition = (nextPosition % 10) + 1;
+            // Keep the position within 1-10 and increment as per normal flow
+            nextPosition = (nextPosition % 10) + 1; // Ensure we stay in the 1-10 range
         }
 
         // Now, add 90% of the paidAmount to the poolBalance
@@ -1381,6 +1378,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
+
 
 
 app.listen(PORT, () => {
