@@ -1282,7 +1282,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
 
-        // **New: Save the old pool balance in the database**
+        // **New: Save the old pool balance in the database before updating**
         const oldPoolBalance = poolBalance - poolShare; // This is the pool balance before the new payment
 
         // Save the old pool balance to the database for comparison later
@@ -1290,16 +1290,16 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             oldPoolBalance
         });
 
-        // **Downgrade condition**: If the paid amount is less than half of the old pool balance, downgrade
+        // **New logic: Downgrade the user if the paid amount is less than half of the old pool balance**
         if (paidAmount < oldPoolBalance / 2) {
-            console.log(`User ${userId} paid less than half of the old pool balance. Downgrading position.`);
-            if (nextPosition > 1) {
-                nextPosition -= 1;  // Downgrade by 1 position (but do not go below 1)
+            console.log(`User ${userId} paid less than half of the old pool balance. Downgrading from position ${nextPosition}.`);
+            if (nextPosition % 2 === 0) {
+                // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
+                nextPosition -= 1;
+                downgradeLosses += 1; // Track the downgrade loss
             }
-            downgradeLosses += 1;  // Track the downgrade loss
         } else {
-            // If the user pays an amount greater than or equal to half of the old pool balance, advance position
-            console.log(`User ${userId} paid an amount greater than or equal to half of the old pool balance. Advancing to the next position.`);
+            // Advance to the next position if the paid amount is enough (greater than half of old pool balance)
             if (nextPosition < 10) {
                 nextPosition += 1; // Move to the next position
             } else {
@@ -1307,7 +1307,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             }
         }
 
-        // **Changed: Check if the user has reached 2 downgrade losses**
+        // **Check if the user has reached 2 downgrade losses**
         if (downgradeLosses === 2) {
             // Assign position 12 or 14 if downgrade losses are 2
             const newPosition = Math.random() < 0.5 ? 12 : 14; // Randomly assign position 12 or 14
