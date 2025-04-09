@@ -1339,31 +1339,93 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const companyShare = paidAmount * 0.10;
         const poolShare = paidAmount * 0.90;
 
-        // **New Pool Balance after adding 90% of paidAmount**
+        // **Initialize downgradeLosses and updatedLoses if not already defined in userData**
+        let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
+        let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
+
+        // **New logic: Compare paid amount with pool balance BEFORE adding 90% to the pool**
+        if (paidAmount >= poolBalance / 2) {  // Check if paid amount is half or more of pool balance
+            console.log(`User ${userId} paid an amount equal to or greater than half of the pool balance. Continuing cycle.`);
+        } else {
+            // Downgrade logic for all even positions (2, 4, 6, 8, 10) if paid amount is below half of pool balance
+            if (nextPosition % 2 === 0 && paidAmount < poolBalance / 2) {
+                console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
+                nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
+                downgradeLosses += 1; // Track the downgrade loss
+            }
+        }
+
+        // **Check if the user has reached 2 downgrade losses**
+        if (downgradeLosses === 2) {
+            // If downgrade losses are 2, assign position 12 or 14 randomly
+            const newPosition = Math.random() < 0.5 ? 12 : 14;
+            nextPosition = newPosition;
+            console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition}.`);
+            downgradeLosses = 0;  // Reset downgrade losses after assigning position 12 or 14
+        }
+
+        const userPosition = nextPosition; // Save current position after potential downgrade
+
+        // Increment loss counter based on odd/even position
+        if (nextPosition % 2 !== 0) {
+            updatedLoses += 1;
+        } else {
+            updatedLoses = 0;
+        }
+
+        // **Trigger jackpot on 5 losses**: Any amount paid triggers jackpot once losses reach 5
+        if (updatedLoses === 5) {
+            userEarnings = poolBalance;
+            poolBalance = 0;
+            nextPosition = 1;  // Reset position to 1 after user earnings all pool balance
+            updatedLoses = 0;
+            chance = 100;
+            console.log(`User ${userId} has reached 5 losses. Jackpot triggered!`);
+        } else {
+            chance = positionChances[nextPosition] || 0;
+            if (chance > 0) {
+                userEarnings = (poolBalance * chance) / 100;
+                poolBalance -= userEarnings;
+            }
+
+            // Keep the position within 1-10 and increment as per normal flow
+            nextPosition = (nextPosition % 10) + 1; // Ensure we stay in the 1-10 range
+        }
+
+        // Now, add 90% of the paidAmount to the poolBalance
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
-        // **Calculate User's Earnings (30% of updated pool balance)**
-        const chance = 30; // This would normally come from the `nextPosition` logic
-        const userEarnings = (poolBalance * chance) / 100;
+        // **Calculate User's Earnings after 90% of the paidAmount is added to the pool**
+        const userEarnings = (poolBalance * chance) / 100; // Earnings based on the updated pool balance
 
-        // **New Capital after adding user's earnings**
+        // **Add the earnings directly to the user's capital**
         const newCapitalAfterEarnings = newCapital + userEarnings;
 
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
-            position: nextPosition,
+            position: userPosition, // Use the final position (after downgrade if any)
             capital: newCapitalAfterEarnings, // Updated capital after earnings
-            loses: userData.loses,
+            loses: updatedLoses,
+            downgradeLosses, // Track downgrade losses
             chance
+        });
+
+        // Add user earnings and timestamp to poolData
+        const userEarningsData = poolData.userEarningsData || [];
+        userEarningsData.push({
+            userId,
+            earnedAmount: userEarnings,
+            timestamp: Date.now()  // Add timestamp of the earning
         });
 
         // Update poolData
         await admin.database().ref('poolData').set({
             poolBalance,
             companyEarnings,
-            nextPosition
+            nextPosition,
+            userEarningsData  // Add the new data to poolData
         });
 
         // Reset server status to not busy
@@ -1386,8 +1448,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
-
-
 
 
 app.listen(PORT, () => {
