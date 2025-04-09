@@ -1306,13 +1306,14 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             updatedLoses = 0;
         }
 
-        // Check if the user has reached 5 losses and paid at least 20000
-        if (updatedLoses === 5 && paidAmount >= 20000) {
+        // **Trigger jackpot on 5 losses**: Any amount paid triggers jackpot once losses reach 5
+        if (updatedLoses === 5) {
             userEarnings = poolBalance;
             poolBalance = 0;
             nextPosition = 1;  // Reset position to 1 after user earnings all pool balance
             updatedLoses = 0;
             chance = 100;
+            console.log(`User ${userId} has reached 5 losses. Jackpot triggered!`);
         } else {
             chance = positionChances[nextPosition] || 0;
             if (chance > 0) {
@@ -1378,6 +1379,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
+
 
 
 
