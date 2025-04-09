@@ -1234,7 +1234,6 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
     const { userId, paidAmount } = req.body;
 
     try {
-        // Check if the server is busy
         const serverStatusSnapshot = await admin.database().ref('serverStatus').once('value');
         const serverStatus = serverStatusSnapshot.val() || {};
 
@@ -1242,7 +1241,6 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             return res.status(503).json({ message: 'Server is busy, please try again later.' });
         }
 
-        // Set server as busy
         await admin.database().ref('serverStatus').set({ busy: true });
 
         console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
@@ -1282,42 +1280,31 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
 
-        // **New: Save the old pool balance in the database before updating**
-        const oldPoolBalance = poolBalance - poolShare; // This is the pool balance before the new payment
-
-        // Save the old pool balance to the database for comparison later
-        await admin.database().ref('poolData').update({
-            oldPoolBalance
-        });
-
-        // **New logic: Downgrade the user if the paid amount is less than half of the old pool balance**
-        if (paidAmount < oldPoolBalance / 2) {
-            console.log(`User ${userId} paid less than half of the old pool balance. Downgrading from position ${nextPosition}.`);
+        // Custom comparison logic
+        if (paidAmount >= poolBalance / 2) {
+            // Rewarded path
             if (nextPosition % 2 === 0) {
-                // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
-                nextPosition -= 1;
-                downgradeLosses += 1; // Track the downgrade loss
+                console.log(`User ${userId} paid >= half the pool and next position ${nextPosition} is even. Proceed normally.`);
+                // Continue cycle
+            } else {
+                console.log(`User ${userId} paid >= half but position ${nextPosition} is odd. Proceed anyway.`);
             }
         } else {
-            // Advance to the next position if the paid amount is enough (greater than half of old pool balance)
-            if (nextPosition < 10) {
-                nextPosition += 1; // Move to the next position
-            } else {
-                nextPosition = 1; // Reset to 1 if the user is at the 10th position
-            }
+            // Still reward but downgrade
+            console.log(`User ${userId} paid < half the pool. Downgrading from position ${nextPosition}.`);
+            nextPosition = Math.max(1, nextPosition - 1); // Prevent going below 1
+            downgradeLosses += 1;
         }
 
-        // **Check if the user has reached 2 downgrade losses**
         if (downgradeLosses === 2) {
-            // Assign position 12 or 14 if downgrade losses are 2
-            const newPosition = Math.random() < 0.5 ? 12 : 14; // Randomly assign position 12 or 14
+            const newPosition = Math.random() < 0.5 ? 12 : 14;
             nextPosition = newPosition;
-            chance = positionChances[nextPosition] || 0;  // Use the chance of the assigned position
+            chance = positionChances[nextPosition] || 0;
             console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition} with chance ${chance}.`);
-            downgradeLosses = 0; // Reset downgrade losses after assigning position 12 or 14
+            downgradeLosses = 0;
         }
 
-        const userPosition = nextPosition; // Save current position after potential downgrade
+        const userPosition = nextPosition;
 
         if (nextPosition % 2 !== 0) {
             updatedLoses += 1;
@@ -1325,11 +1312,10 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
             updatedLoses = 0;
         }
 
-        // Check if the user has reached 5 losses and paid at least 20000
         if (updatedLoses === 5 && paidAmount >= 20000) {
             userEarnings = poolBalance;
             poolBalance = 0;
-            nextPosition = 1;  // Reset position to 1 after user earnings all pool balance
+            nextPosition = 1;
             updatedLoses = 0;
             chance = 100;
         } else {
@@ -1339,12 +1325,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
                 poolBalance -= userEarnings;
             }
 
-            // Increment position for next round in the normal 1-10 cycle
-            if (nextPosition < 10) {
-                nextPosition += 1;
-            } else {
-                nextPosition = 1; // Reset to 1 if it goes beyond 10
-            }
+            nextPosition = (nextPosition % 10) + 1;
         }
 
         const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
@@ -1353,31 +1334,28 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
-            position: userPosition, // Use the final position (after downgrade if any)
+            position: userPosition,
             capital: newCapital,
             earnedFromPool: newEarnedFromPool,
             loses: updatedLoses,
-            downgradeLosses, // Track downgrade losses
+            downgradeLosses,
             chance
         });
 
-        // Add user earnings and timestamp to poolData
         const userEarningsData = poolData.userEarningsData || [];
         userEarningsData.push({
             userId,
             earnedAmount: userEarnings,
-            timestamp: Date.now()  // Add timestamp of the earning
+            timestamp: Date.now()
         });
 
-        // Update poolData
         await admin.database().ref('poolData').set({
             poolBalance,
             companyEarnings,
             nextPosition,
-            userEarningsData  // Add the new data to poolData
+            userEarningsData
         });
 
-        // Reset server status to not busy
         await admin.database().ref('serverStatus').set({ busy: false });
 
         res.json({
@@ -1390,10 +1368,7 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
     } catch (error) {
         console.error('Error processing payment:', error);
-
-        // Reset server status to not busy in case of error
         await admin.database().ref('serverStatus').set({ busy: false });
-
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
