@@ -35,18 +35,18 @@ app.use(express.json());
 
 // Chance mapping based on position
  const positionChances = {
-    1: 2,
-    3: 1,
-    5: 3,
-    7: 5,
+    1: 3,
+    3: 0,
+    5: 1,
+    7: 0,
     9: 4,
     2: 15,
     4: 30,
     6: 50,
     8: 60,
     10: 70,
-    12: 5,
-    14: 10
+    12: 0,
+    14: 5
 };
 
 
