@@ -1290,15 +1290,17 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
             oldPoolBalance
         });
 
-        // **New logic: Advance to the next position if the paid amount is half or more of the old pool balance**
+        // **Logic for advancing or downgrading user position**
+        let userPosition = userData.position || nextPosition;
+
         if (paidAmount >= oldPoolBalance / 2) {
             console.log(`User ${userId} paid an amount higher than or equal to half of the old pool balance. Advancing to the next position.`);
-            nextPosition = (nextPosition % 10) + 1; // Simply advance the position in the cycle
+            userPosition = (userPosition % 10) + 1; // Simply advance the user's position within the 1-10 cycle
         } else {
             // Downgrade logic for all even positions (2, 4, 6, 8, 10) if the paid amount is below half of the old pool balance
-            if (nextPosition % 2 === 0 && paidAmount < oldPoolBalance / 2) {
-                console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
-                nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
+            if (userPosition % 2 === 0 && paidAmount < oldPoolBalance / 2) {
+                console.log(`User ${userId} downgraded from position ${userPosition} due to low payment.`);
+                userPosition = Math.max(1, userPosition - 1); // Downgrade position by 1 (ensure position doesn't go below 1)
                 downgradeLosses += 1; // Track the downgrade loss
             }
         }
@@ -1307,36 +1309,25 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         if (downgradeLosses === 2) {
             // Assign position 12 or 14 if downgrade losses are 2
             const newPosition = Math.random() < 0.5 ? 12 : 14; // Randomly assign position 12 or 14
-            nextPosition = newPosition;
-            chance = positionChances[nextPosition] || 0;  // Use the chance of the assigned position
-            console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition} with chance ${chance}.`);
+            userPosition = newPosition;
+            chance = positionChances[newPosition] || 0;  // Use the chance of the assigned position
+            console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${userPosition} with chance ${chance}.`);
             downgradeLosses = 0; // Reset downgrade losses after assigning position 12 or 14
-        }
-
-        const userPosition = nextPosition; // Save current position after potential downgrade
-
-        if (nextPosition % 2 !== 0) {
-            updatedLoses += 1;
-        } else {
-            updatedLoses = 0;
         }
 
         // Check if the user has reached 5 losses and paid at least 20000
         if (updatedLoses === 5 && paidAmount >= 20000) {
             userEarnings = poolBalance;
             poolBalance = 0;
-            nextPosition = 1;  // Reset position to 1 after user earnings all pool balance
+            userPosition = 1;  // Reset position to 1 after user earnings all pool balance
             updatedLoses = 0;
             chance = 100;
         } else {
-            chance = positionChances[nextPosition] || 0;
+            chance = positionChances[userPosition] || 0;
             if (chance > 0) {
                 userEarnings = (poolBalance * chance) / 100;
                 poolBalance -= userEarnings;
             }
-
-            // Increment position for next round in the normal 1-10 cycle
-            nextPosition = (nextPosition % 10) + 1; // Correct cycle after each update
         }
 
         const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
@@ -1345,7 +1336,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
-            position: userPosition, // Use the final position (after downgrade if any)
+            position: userPosition, // Use the user's final position after upgrade/downgrade
             capital: newCapital,
             earnedFromPool: newEarnedFromPool,
             loses: updatedLoses,
@@ -1362,12 +1353,15 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         });
 
         // Update poolData
-        await admin.database().ref('poolData').set({
+        await admin.database().ref('poolData').update({
             poolBalance,
             companyEarnings,
-            nextPosition,
             userEarningsData  // Add the new data to poolData
         });
+
+        // Update the next position for the pool to maintain the cycle
+        nextPosition = (nextPosition % 10) + 1;  // Increment the next position for pool
+        await admin.database().ref('poolData').update({ nextPosition });
 
         // Reset server status to not busy
         await admin.database().ref('serverStatus').set({ busy: false });
