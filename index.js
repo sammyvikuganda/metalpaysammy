@@ -1396,15 +1396,14 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
-        const currentEarnedFromPool = isNaN(userData.earnedFromPool) ? 0 : userData.earnedFromPool;
-        const newEarnedFromPool = currentEarnedFromPool + userEarnings;
+        // **Add the user earnings directly to the user's capital**
+        const newCapitalWithEarnings = newCapital + userEarnings;
 
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
             position: userPosition, // Use the final position (after downgrade if any)
-            capital: newCapital,
-            earnedFromPool: newEarnedFromPool,
+            capital: newCapitalWithEarnings,
             loses: updatedLoses,
             downgradeLosses, // Track downgrade losses
             chance
