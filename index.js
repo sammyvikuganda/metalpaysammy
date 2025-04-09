@@ -1374,6 +1374,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         }
 
         // **Trigger jackpot on 5 losses**: Any amount paid triggers jackpot once losses reach 5
+        let userEarnings = 0; // Initialize userEarnings variable before use
         if (updatedLoses === 5) {
             userEarnings = poolBalance;
             poolBalance = 0;
@@ -1397,7 +1398,7 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         companyEarnings += companyShare;
 
         // **Calculate User's Earnings after 90% of the paidAmount is added to the pool**
-        const userEarnings = (poolBalance * chance) / 100; // Earnings based on the updated pool balance
+        userEarnings = (poolBalance * chance) / 100; // Earnings based on the updated pool balance
 
         // **Add the earnings directly to the user's capital**
         const newCapitalAfterEarnings = newCapital + userEarnings;
