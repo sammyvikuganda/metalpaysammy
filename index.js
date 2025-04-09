@@ -1228,7 +1228,6 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
-// Endpoint for setting the custom interest rate and handling user payments
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
 
@@ -1269,7 +1268,10 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         let companyEarnings = poolData.companyEarnings || 0;
         let nextPosition = poolData.nextPosition || 1;
 
-        // **New logic: Compare paid amount with pool balance BEFORE adding 90% to pool**
+        const companyShare = paidAmount * 0.10;
+        const poolShare = paidAmount * 0.90;
+
+        // **New logic: Compare paid amount with pool balance BEFORE adding 90% to the pool**
         if (paidAmount >= poolBalance / 2) {  // Check if paid amount is half or more of pool balance
             console.log(`User ${userId} paid an amount equal to or greater than half of the pool balance. Continuing cycle.`);
 
@@ -1321,9 +1323,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         }
 
         // Now, add 90% of the paidAmount to the poolBalance
-        const companyShare = paidAmount * 0.10;
-        const poolShare = paidAmount * 0.90;
-
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
