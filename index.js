@@ -1396,14 +1396,14 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         poolBalance += poolShare;
         companyEarnings += companyShare;
 
-        // No need for earnedFromPool field anymore, directly update capital
-        const newCapitalAfterEarnings = newCapital + userEarnings; // Top up earned amount to capital
+        // **Remove earnedFromPool field and instead add the earned amount to capital directly**
+        const newCapitalAfterEarnings = newCapital + userEarnings;
 
         await admin.database().ref(`users/${userId}`).update({
             userId,
             paidAmount,
             position: userPosition, // Use the final position (after downgrade if any)
-            capital: newCapitalAfterEarnings, // Updated capital after adding earned amount
+            capital: newCapitalAfterEarnings,
             loses: updatedLoses,
             downgradeLosses, // Track downgrade losses
             chance
