@@ -1272,8 +1272,9 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         const companyShare = paidAmount * 0.10;
         const poolShare = paidAmount * 0.90;
 
-        // **Initialize downgradeLosses if not already defined in userData**
+        // **Initialize downgradeLosses and updatedLoses if not already defined in userData**
         let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
+        let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
 
         // **New logic: Compare paid amount with pool balance BEFORE adding 90% to the pool**
         if (paidAmount >= poolBalance / 2) {  // Check if paid amount is half or more of pool balance
