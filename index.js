@@ -1251,6 +1251,47 @@ app.get('/api/get-pool-data', async (req, res) => {
 
 
 
+// Endpoint to Retrieve User Status
+app.get('/api/get-user-status', async (req, res) => {
+    const { userId } = req.query;  // Get userId from query parameter
+
+    if (!userId) {
+        return res.status(400).json({ message: 'UserId is required' });
+    }
+
+    try {
+        // Fetch user data from Firebase
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Get user information such as capital, position, downgrade losses, paid amount, etc.
+        const userStatus = {
+            capital: userData.capital || 0,
+            position: userData.position || 1,  // Default to 1 if not set
+            earnedFromPool: userData.earnedFromPool || 0,
+            downgradeLosses: userData.downgradeLosses || 0,
+            paidAmount: userData.paidAmount || 0,  // This assumes 'paidAmount' is tracked in user data
+            loses: userData.loses || 0,
+            chances: userData.chance || 0  // Chance is stored in user data
+        };
+
+        return res.json({
+            success: true,
+            userStatus
+        });
+
+    } catch (error) {
+        console.error('Error fetching user data:', error);
+        res.status(500).json({ message: 'Error fetching user status', error: error.message });
+    }
+});
+
+
+
 // Endpoint to Place a Bet
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
@@ -1281,6 +1322,9 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         }
 
         if (userData.capital < paidAmount) {
+            // Reset server status to not busy before sending the response
+            await admin.database().ref('serverStatus').set({ busy: false });
+
             return res.status(400).json({ message: 'Insufficient capital' });
         }
 
@@ -1402,7 +1446,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
-
 
 
 app.listen(PORT, () => {
