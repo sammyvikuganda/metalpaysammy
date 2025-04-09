@@ -1228,7 +1228,30 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
+// Endpoint to fetch all details in the pool data, including user earnings data
+app.get('/api/get-pool-data', async (req, res) => {
+    try {
+        const poolSnapshot = await admin.database().ref('poolData').once('value');
+        const poolData = poolSnapshot.val();
 
+        if (!poolData) {
+            return res.status(404).json({ message: 'Pool data not found' });
+        }
+
+        res.json({
+            success: true,
+            poolData
+        });
+
+    } catch (error) {
+        console.error('Error fetching pool data:', error);
+        res.status(500).json({ message: 'Error fetching pool data', error: error.message });
+    }
+});
+
+
+
+// Endpoint to Place a Bet
 app.post('/api/set-custom-interest-rate', async (req, res) => {
     const { userId, paidAmount } = req.body;
 
@@ -1379,7 +1402,6 @@ app.post('/api/set-custom-interest-rate', async (req, res) => {
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
-
 
 
 
