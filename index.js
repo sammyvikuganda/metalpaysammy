@@ -51,6 +51,80 @@ app.use(express.json());
 
 
 
+// The "fruitsGroupedByPayout" object represents the payout structure for each round
+const fruitsGroupedByPayout = {
+    1: { fruits: [], totalPayout: 0 },
+    2: { fruits: [], totalPayout: 0 },
+    3: { fruits: [{ type: "🍊", quantity: 2, payout: 200 }], totalPayout: 400 },
+    4: { fruits: [], totalPayout: 0 },
+    5: { fruits: [{ type: "🍉", quantity: 5, payout: 300 }], totalPayout: 1500 },
+    6: { fruits: [{ type: "🍎", quantity: 3, payout: 350 }], totalPayout: 1050 },
+    7: { fruits: [{ type: "🥝", quantity: 4, payout: 400 }], totalPayout: 1600 },
+    8: { fruits: [], totalPayout: 0 },
+    9: { fruits: [{ type: "🍍", quantity: 8, payout: 500 }], totalPayout: 4000 },
+    10: { fruits: [{ type: "🍓", quantity: 2, payout: 550 }], totalPayout: 1100 },
+    11: { fruits: [], totalPayout: 0 },
+    12: { fruits: [{ type: "🍏", quantity: 12, payout: 650 }], totalPayout: 7800 },
+    13: { fruits: [{ type: "🍑", quantity: 6, payout: 700 }], totalPayout: 4200 },
+    14: { fruits: [], totalPayout: 0 },
+    15: { fruits: [{ type: "🍇", quantity: 7, payout: 800 }], totalPayout: 5600 },
+    16: { fruits: [{ type: "🍎", quantity: 9, payout: 850 }], totalPayout: 7650 },
+    17: {
+        fruits: [
+            { type: "🍒", quantity: 2, payout: 100 },
+            { type: "🍓", quantity: 2, payout: 550 }
+        ],
+        totalPayout: (2 * 100) + (2 * 550)
+    },
+    18: { fruits: [{ type: "🥥", quantity: 11, payout: 950 }], totalPayout: 10450 },
+    19: {
+        fruits: [
+            { type: "🍊", quantity: 5, payout: 200 },
+            { type: "🍌", quantity: 5, payout: 200 }
+        ],
+        totalPayout: (5 * 200) + (5 * 200)
+    },
+    20: {
+        fruits: [
+            { type: "🍉", quantity: 7, payout: 150 },
+            { type: "🍎", quantity: 5, payout: 350 }
+        ],
+        totalPayout: (7 * 150) + (5 * 350)
+    },
+    21: { fruits: [{ type: "🍎", quantity: 12, payout: 1200 }], totalPayout: 14400 },
+    22: {
+        fruits: [
+            { type: "🍒", quantity: 6, payout: 100 },
+            { type: "🍓", quantity: 6, payout: 550 }
+        ],
+        totalPayout: (6 * 100) + (6 * 550)
+    },
+    23: {
+        fruits: [
+            { type: "🥥", quantity: 6, payout: 950 },
+            { type: "🍍", quantity: 5, payout: 500 }
+        ],
+        totalPayout: (6 * 950) + (5 * 500)
+    },
+    24: {
+        fruits: [
+            { type: "🍇", quantity: 6, payout: 800 },
+            { type: "🍎", quantity: 6, payout: 850 }
+        ],
+        totalPayout: (6 * 800) + (6 * 850)
+    },
+    25: {
+        fruits: [
+            { type: "🍓", quantity: 7, payout: 550 },
+            { type: "🍏", quantity: 5, payout: 650 }
+        ],
+        totalPayout: (7 * 550) + (5 * 650)
+    },
+};
+
+
+
+
 // Create a new user with a specified user ID
 app.post('/api/create-user', async (req, res) => {
     const { userId } = req.body;
@@ -1450,6 +1524,97 @@ await admin.database().ref('poolData').set({
         res.status(500).json({ message: 'Error processing payment', error: error.message });
     }
 });
+
+
+
+
+
+
+app.post('/play', async (req, res) => {
+    const { userId, betAmount } = req.body;
+
+    if (!userId || !betAmount) {
+        return res.status(400).send('Missing userId or betAmount');
+    }
+
+    const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+    if (!userSnapshot.exists()) {
+        return res.status(404).send('User not found');
+    }
+
+    const userData = userSnapshot.val();
+    const currentCapital = userData.capital;
+
+    if (currentCapital < betAmount) {
+        return res.status(400).send('Insufficient capital');
+    }
+
+    const casinoDataRef = admin.database().ref('casinoData');
+    const casinoSnapshot = await casinoDataRef.once('value');
+    let casinoData = casinoSnapshot.val() || {
+        nextRound: Math.floor(Math.random() * 25) + 1,
+        casinoBalance: 0,
+        companyShares: 0,
+    };
+
+    let selectedRound = fruitsGroupedByPayout[casinoData.nextRound];
+    let userPayout = 0;
+
+    // Check if casino balance can cover the payout
+    if (casinoData.casinoBalance >= selectedRound.totalPayout) {
+        // Calculate the Payout Multiplier
+        const referenceValue = 3000;  // You can adjust this reference value based on the desired payout scaling
+        const payoutMultiplier = betAmount / referenceValue;
+
+        // Calculate the Actual Payout
+        userPayout = selectedRound.totalPayout * payoutMultiplier;
+    } else {
+        // If pool balance is insufficient, assign default round with 0 payout
+        selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
+    }
+
+    let updatedCapital = currentCapital - betAmount + userPayout;
+
+    let casinoBalance = casinoData.casinoBalance || 0;
+    let companyShares = casinoData.companyShares || 0;
+
+    // Update the casino balance and company shares based on the bet
+    const poolContribution = betAmount * 0.9;
+    const companyContribution = betAmount * 0.1;
+
+    casinoBalance += poolContribution;
+    companyShares += companyContribution;
+
+    // Update the next round for the casino
+    const newNextRound = (casinoData.nextRound % 25) + 1;
+
+    // Record the round the user got and update the capital
+    await admin.database().ref(`users/${userId}`).update({
+        casinoRound: casinoData.nextRound,
+        capital: updatedCapital,
+    });
+
+    await Promise.all([
+        admin.database().ref('casinoData').update({
+            nextRound: newNextRound,
+            casinoBalance,
+            companyShares,
+        }),
+    ]);
+
+    return res.json({
+        userId,
+        betAmount,
+        selectedRound: {
+            fruits: selectedRound.fruits,
+            totalPayout: selectedRound.totalPayout,
+        },
+        userPayout: userPayout,
+        updatedCapital: updatedCapital,
+        nextRound: newNextRound,
+    });
+});
+
 
 
 app.listen(PORT, () => {
