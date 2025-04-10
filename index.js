@@ -1530,6 +1530,101 @@ await admin.database().ref('poolData').set({
 
 
 
+const express = require('express');
+const cors = require('cors');
+const admin = require('firebase-admin');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Initialize Firebase Admin SDK
+admin.initializeApp({
+    credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    }),
+    databaseURL: "https://metal-pay-55c31-default-rtdb.firebaseio.com/",
+});
+
+app.use(cors());
+app.use(express.json());
+
+const generateTransactionId = () => {
+    const randomDigits = Math.floor(1000000 + Math.random() * 9000000).toString();
+    return `NXS${randomDigits}`;
+};
+
+// The "fruitsGroupedByPayout" object represents the payout structure for each round
+const fruitsGroupedByPayout = {
+    1: { fruits: [], totalPayout: 0 },
+    2: { fruits: [], totalPayout: 0 },
+    3: { fruits: [{ type: "🍊", quantity: 2, payout: 200 }], totalPayout: 400 },
+    4: { fruits: [], totalPayout: 0 },
+    5: { fruits: [{ type: "🍉", quantity: 5, payout: 300 }], totalPayout: 1500 },
+    6: { fruits: [{ type: "🍎", quantity: 3, payout: 350 }], totalPayout: 1050 },
+    7: { fruits: [{ type: "🥝", quantity: 4, payout: 400 }], totalPayout: 1600 },
+    8: { fruits: [], totalPayout: 0 },
+    9: { fruits: [{ type: "🍍", quantity: 8, payout: 500 }], totalPayout: 4000 },
+    10: { fruits: [{ type: "🍓", quantity: 2, payout: 550 }], totalPayout: 1100 },
+    11: { fruits: [], totalPayout: 0 },
+    12: { fruits: [{ type: "🍏", quantity: 12, payout: 650 }], totalPayout: 7800 },
+    13: { fruits: [{ type: "🍑", quantity: 6, payout: 700 }], totalPayout: 4200 },
+    14: { fruits: [], totalPayout: 0 },
+    15: { fruits: [{ type: "🍇", quantity: 7, payout: 800 }], totalPayout: 5600 },
+    16: { fruits: [{ type: "🍎", quantity: 9, payout: 850 }], totalPayout: 7650 },
+    17: {
+        fruits: [
+            { type: "🍒", quantity: 2, payout: 100 },
+            { type: "🍓", quantity: 2, payout: 550 }
+        ],
+        totalPayout: (2 * 100) + (2 * 550)
+    },
+    18: { fruits: [{ type: "🥥", quantity: 11, payout: 950 }], totalPayout: 10450 },
+    19: {
+        fruits: [
+            { type: "🍊", quantity: 5, payout: 200 },
+            { type: "🍌", quantity: 5, payout: 200 }
+        ],
+        totalPayout: (5 * 200) + (5 * 200)
+    },
+    20: {
+        fruits: [
+            { type: "🍉", quantity: 7, payout: 150 },
+            { type: "🍎", quantity: 5, payout: 350 }
+        ],
+        totalPayout: (7 * 150) + (5 * 350)
+    },
+    21: { fruits: [{ type: "🍎", quantity: 12, payout: 1200 }], totalPayout: 14400 },
+    22: {
+        fruits: [
+            { type: "🍒", quantity: 6, payout: 100 },
+            { type: "🍓", quantity: 6, payout: 550 }
+        ],
+        totalPayout: (6 * 100) + (6 * 550)
+    },
+    23: {
+        fruits: [
+            { type: "🥥", quantity: 6, payout: 950 },
+            { type: "🍍", quantity: 5, payout: 500 }
+        ],
+        totalPayout: (6 * 950) + (5 * 500)
+    },
+    24: {
+        fruits: [
+            { type: "🍇", quantity: 6, payout: 800 },
+            { type: "🍎", quantity: 6, payout: 850 }
+        ],
+        totalPayout: (6 * 800) + (6 * 850)
+    },
+    25: {
+        fruits: [
+            { type: "🍓", quantity: 7, payout: 550 },
+            { type: "🍏", quantity: 5, payout: 650 }
+        ],
+        totalPayout: (7 * 550) + (5 * 650)
+    },
+};
+
 app.post('/play', async (req, res) => {
     const { userId, betAmount } = req.body;
 
@@ -1563,7 +1658,7 @@ app.post('/play', async (req, res) => {
     // Check if casino balance can cover the payout
     if (casinoData.casinoBalance >= selectedRound.totalPayout) {
         // Calculate the Payout Multiplier
-        const referenceValue = 3000;  // You can adjust this reference value based on the desired payout scaling
+        const referenceValue = 3000;
         const payoutMultiplier = betAmount / referenceValue;
 
         // Calculate the Actual Payout
@@ -1602,17 +1697,23 @@ app.post('/play', async (req, res) => {
         }),
     ]);
 
+    // Prepare response with fruit emojis and quantities
+    let roundDetails = selectedRound.fruits.map(fruit => {
+        return `${fruit.quantity}x ${fruit.type}`;
+    }).join(", ");
+
     return res.json({
         userId,
         betAmount,
-        selectedRound: {
-            fruits: selectedRound.fruits,
-            totalPayout: selectedRound.totalPayout,
-        },
+        round: casinoData.nextRound,
+        roundDetails: roundDetails,
         userPayout: userPayout,
         updatedCapital: updatedCapital,
-        nextRound: newNextRound,
     });
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
 
 
