@@ -1591,6 +1591,11 @@ app.post('/play', async (req, res) => {
     casinoBalance += poolContribution;
     companyShares += companyContribution;
 
+    // Deduct user payout from casino balance if payout occurred
+    if (userPayout > 0) {
+        casinoBalance -= userPayout;
+    }
+
     // Randomly choose the next round after the game ends
     const newNextRound = Math.floor(Math.random() * 30) + 1;
 
@@ -1630,8 +1635,6 @@ app.post('/play', async (req, res) => {
         updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
-
-
 
 
 
