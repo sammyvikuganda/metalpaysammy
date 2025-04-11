@@ -1610,11 +1610,17 @@ app.post('/play', async (req, res) => {
         return `${fruit.quantity}x ${fruit.type}`;
     }).join(", ");
 
+    // Calculate payout per fruit for each fruit in the round
+    let payoutPerFruit = selectedRound.fruits.map(fruit => {
+        return `${fruit.type} ${fruit.payout}`;
+    }).join(", ");
+
     return res.json({
         userId,
         betAmount,
         round: casinoData.nextRound,
         roundDetails: roundDetails,
+        payoutPerFruit: payoutPerFruit,
         userPayout: userPayout,
         updatedCapital: updatedCapital,
     });
