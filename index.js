@@ -120,9 +120,14 @@ const fruitsGroupedByPayout = {
         ],
         totalPayout: (7 * 550) + (5 * 650)
     },
+
+26: { fruits: [{ type: "🍊", quantity: 5, payout: 250 }], totalPayout: 1250 },
+27: { fruits: [{ type: "🍓", quantity: 4, payout: 500 }], totalPayout: 2000 },
+28: { fruits: [{ type: "🍇", quantity: 8, payout: 600 }], totalPayout: 4800 },
+29: { fruits: [{ type: "🍏", quantity: 3, payout: 700 }], totalPayout: 2100 },
+30: { fruits: [{ type: "🍒", quantity: 6, payout: 400 }], totalPayout: 2400 },
+
 };
-
-
 
 
 // Create a new user with a specified user ID
@@ -1527,8 +1532,6 @@ await admin.database().ref('poolData').set({
 
 
 
-
-
 app.post('/play', async (req, res) => {
     const { userId, betAmount } = req.body;
 
@@ -1551,11 +1554,12 @@ app.post('/play', async (req, res) => {
     const casinoDataRef = admin.database().ref('casinoData');
     const casinoSnapshot = await casinoDataRef.once('value');
     let casinoData = casinoSnapshot.val() || {
-        nextRound: Math.floor(Math.random() * 25) + 1,
+        nextRound: Math.floor(Math.random() * 30) + 1,  // Randomly select a round between 1 and 30
         casinoBalance: 0,
         companyShares: 0,
     };
 
+    // Select the fruits and payout structure for the chosen round
     let selectedRound = fruitsGroupedByPayout[casinoData.nextRound];
     let userPayout = 0;
 
@@ -1584,8 +1588,8 @@ app.post('/play', async (req, res) => {
     casinoBalance += poolContribution;
     companyShares += companyContribution;
 
-    // Update the next round for the casino
-    const newNextRound = (casinoData.nextRound % 25) + 1;
+    // Randomly choose the next round after the game ends
+    const newNextRound = Math.floor(Math.random() * 30) + 1;  // Randomly select any round between 1 and 30
 
     // Record the round the user got and update the capital
     await admin.database().ref(`users/${userId}`).update({
@@ -1595,7 +1599,7 @@ app.post('/play', async (req, res) => {
 
     await Promise.all([
         admin.database().ref('casinoData').update({
-            nextRound: newNextRound,
+            nextRound: newNextRound,  // Update the next round with the new random round
             casinoBalance,
             companyShares,
         }),
@@ -1615,6 +1619,9 @@ app.post('/play', async (req, res) => {
         updatedCapital: updatedCapital,
     });
 });
+
+
+
 
 
 app.listen(PORT, () => {
