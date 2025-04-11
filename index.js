@@ -1602,10 +1602,10 @@ app.post('/play', async (req, res) => {
         selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
     }
 
-    // Now calculate the profit by subtracting the betAmount from the userPayout
-    let userProfit = basePayout;
+    // Now include betAmount in userPayout
+    let userPayout = basePayout + betAmount;
 
-    let updatedCapital = currentCapital - betAmount + userProfit;
+    let updatedCapital = currentCapital - betAmount + userPayout;
 
     let casinoBalance = casinoData.casinoBalance || 0;
     let companyShares = casinoData.companyShares || 0;
@@ -1617,8 +1617,8 @@ app.post('/play', async (req, res) => {
     companyShares += companyContribution;
 
     // Deduct the full payout (including bet) from casino pool
-    if (userProfit > 0) {
-        casinoBalance -= userProfit;
+    if (userPayout > 0) {
+        casinoBalance -= userPayout;
     }
 
     const newNextRound = Math.floor(Math.random() * 30) + 1;
@@ -1646,17 +1646,16 @@ app.post('/play', async (req, res) => {
         return `${fruit.type} ${formatted}`;
     }).join(", ");
 
+    // Modify the response to exclude betAmount and only return the profits
     return res.json({
         userId,
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userProfit: parseFloat(userProfit.toFixed(1)),
+        userPayout: parseFloat(userPayout.toFixed(1)),  // this now represents the full payout
         updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
-
-
 
 
 
