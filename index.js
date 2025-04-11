@@ -1554,52 +1554,49 @@ app.post('/play', async (req, res) => {
     const casinoDataRef = admin.database().ref('casinoData');
     const casinoSnapshot = await casinoDataRef.once('value');
     let casinoData = casinoSnapshot.val() || {
-        nextRound: Math.floor(Math.random() * 30) + 1,  // Randomly select a round between 1 and 30
+        nextRound: Math.floor(Math.random() * 30) + 1,
         casinoBalance: 0,
         companyShares: 0,
     };
 
-    // Select the fruits and payout structure for the chosen round
     let selectedRound = fruitsGroupedByPayout[casinoData.nextRound];
     let userPayout = 0;
     let payoutMultiplier = 0;
+    let payoutValid = false;
 
-    // Check if casino balance can cover the payout
     if (casinoData.casinoBalance >= selectedRound.totalPayout) {
-        // Calculate the Payout Multiplier
         const referenceValue = 3000;
         payoutMultiplier = betAmount / referenceValue;
 
-        // Calculate Actual Payout based on each fruit
         userPayout = selectedRound.fruits.reduce((acc, fruit) => {
             return acc + (fruit.payout * fruit.quantity * payoutMultiplier);
         }, 0);
+
+        payoutValid = true;
     } else {
-        // If pool balance is insufficient, assign default round with 0 payout
-        selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
+        selectedRound = fruitsGroupedByPayout[1];
     }
+
+    // Round payout to 1 decimal place before updating anything
+    userPayout = parseFloat(userPayout.toFixed(1));
 
     let updatedCapital = currentCapital - betAmount + userPayout;
 
     let casinoBalance = casinoData.casinoBalance || 0;
     let companyShares = casinoData.companyShares || 0;
 
-    // Update the casino balance and company shares based on the bet
     const poolContribution = betAmount * 0.9;
     const companyContribution = betAmount * 0.1;
 
     casinoBalance += poolContribution;
     companyShares += companyContribution;
 
-    // Deduct user payout from casino balance if payout occurred
-    if (userPayout > 0) {
+    if (payoutValid && userPayout > 0) {
         casinoBalance -= userPayout;
     }
 
-    // Randomly choose the next round after the game ends
     const newNextRound = Math.floor(Math.random() * 30) + 1;
 
-    // Record the round the user got and update the capital
     await admin.database().ref(`users/${userId}`).update({
         casinoRound: casinoData.nextRound,
         capital: updatedCapital,
@@ -1613,12 +1610,10 @@ app.post('/play', async (req, res) => {
         }),
     ]);
 
-    // Prepare response with fruit emojis and quantities
     let roundDetails = selectedRound.fruits.map(fruit => {
         return `${fruit.quantity}x ${fruit.type}`;
     }).join(", ");
 
-    // Calculate payout per fruit with applied multiplier (formatted with 1 decimal, no .0)
     let payoutPerFruit = selectedRound.fruits.map(fruit => {
         let adjusted = payoutMultiplier ? fruit.payout * payoutMultiplier : 0;
         let formatted = adjusted % 1 === 0 ? adjusted.toFixed(0) : adjusted.toFixed(1);
@@ -1631,11 +1626,10 @@ app.post('/play', async (req, res) => {
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: userPayout % 1 === 0 ? parseFloat(userPayout.toFixed(0)) : parseFloat(userPayout.toFixed(1)),
-        updatedCapital: updatedCapital % 1 === 0 ? parseFloat(updatedCapital.toFixed(0)) : parseFloat(updatedCapital.toFixed(1)),
+        userPayout: userPayout,
+        updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
-
 
 
 
