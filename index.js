@@ -1646,16 +1646,17 @@ app.post('/play', async (req, res) => {
         return `${fruit.type} ${formatted}`;
     }).join(", ");
 
-    // Modify the response to exclude betAmount and only return the profits
     return res.json({
         userId,
+        betAmount,
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: parseFloat(userPayout.toFixed(1)),  // this now represents the full payout
+        userPayout: parseFloat(userPayout.toFixed(1)),
         updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
+
 
 
 
