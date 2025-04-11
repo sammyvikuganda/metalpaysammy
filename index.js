@@ -1532,6 +1532,34 @@ await admin.database().ref('poolData').set({
 
 
 
+
+
+// Endpoint to fetch the current casino capital (casino balance)
+app.get('/casino-capital', async (req, res) => {
+    try {
+        const casinoDataRef = admin.database().ref('casinoData');
+        const casinoSnapshot = await casinoDataRef.once('value');
+
+        if (!casinoSnapshot.exists()) {
+            return res.status(404).send('Casino data not found');
+        }
+
+        const casinoData = casinoSnapshot.val();
+        const casinoCapital = casinoData.casinoBalance || 0;
+
+        return res.json({
+            casinoCapital: parseFloat(casinoCapital.toFixed(2)),
+        });
+    } catch (error) {
+        console.error('Error fetching casino capital:', error);
+        return res.status(500).send('Internal server error');
+    }
+});
+
+
+
+
+// Endpoint to place a bet and play the fruit game
 app.post('/play', async (req, res) => {
     const { userId, betAmount } = req.body;
 
@@ -1574,10 +1602,10 @@ app.post('/play', async (req, res) => {
         selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
     }
 
-    // Now include betAmount in userPayout
-    let userPayout = basePayout + betAmount;
+    // Now calculate the profit by subtracting the betAmount from the userPayout
+    let userProfit = basePayout;
 
-    let updatedCapital = currentCapital - betAmount + userPayout;
+    let updatedCapital = currentCapital - betAmount + userProfit;
 
     let casinoBalance = casinoData.casinoBalance || 0;
     let companyShares = casinoData.companyShares || 0;
@@ -1589,8 +1617,8 @@ app.post('/play', async (req, res) => {
     companyShares += companyContribution;
 
     // Deduct the full payout (including bet) from casino pool
-    if (userPayout > 0) {
-        casinoBalance -= userPayout;
+    if (userProfit > 0) {
+        casinoBalance -= userProfit;
     }
 
     const newNextRound = Math.floor(Math.random() * 30) + 1;
@@ -1620,14 +1648,16 @@ app.post('/play', async (req, res) => {
 
     return res.json({
         userId,
-        betAmount,
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: parseFloat(userPayout.toFixed(1)),
+        userProfit: parseFloat(userProfit.toFixed(1)),
         updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
+
+
+
 
 
 
