@@ -1534,24 +1534,30 @@ await admin.database().ref('poolData').set({
 
 
 
-// Endpoint to fetch the current casino capital (casino balance)
-app.get('/casino-capital', async (req, res) => {
-    try {
-        const casinoDataRef = admin.database().ref('casinoData');
-        const casinoSnapshot = await casinoDataRef.once('value');
+// Endpoint to fetch user casino capital
+app.get('/user-casino-capital/:userId', async (req, res) => {
+    const { userId } = req.params;
 
-        if (!casinoSnapshot.exists()) {
-            return res.status(404).send('Casino data not found');
+    if (!userId) {
+        return res.status(400).send('Missing userId');
+    }
+
+    try {
+        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
+
+        if (!userSnapshot.exists()) {
+            return res.status(404).send('User not found');
         }
 
-        const casinoData = casinoSnapshot.val();
-        const casinoCapital = casinoData.casinoBalance || 0;
+        const userData = userSnapshot.val();
+        const casinoCapital = userData.capital || 0;
 
         return res.json({
+            userId,
             casinoCapital: parseFloat(casinoCapital.toFixed(2)),
         });
     } catch (error) {
-        console.error('Error fetching casino capital:', error);
+        console.error('Error fetching user casino capital:', error);
         return res.status(500).send('Internal server error');
     }
 });
