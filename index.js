@@ -1562,15 +1562,18 @@ app.post('/play', async (req, res) => {
     // Select the fruits and payout structure for the chosen round
     let selectedRound = fruitsGroupedByPayout[casinoData.nextRound];
     let userPayout = 0;
+    let payoutMultiplier = 0;
 
     // Check if casino balance can cover the payout
     if (casinoData.casinoBalance >= selectedRound.totalPayout) {
         // Calculate the Payout Multiplier
         const referenceValue = 3000;
-        const payoutMultiplier = betAmount / referenceValue;
+        payoutMultiplier = betAmount / referenceValue;
 
-        // Calculate the Actual Payout
-        userPayout = selectedRound.totalPayout * payoutMultiplier;
+        // Calculate Actual Payout based on each fruit
+        userPayout = selectedRound.fruits.reduce((acc, fruit) => {
+            return acc + (fruit.payout * fruit.quantity * payoutMultiplier);
+        }, 0);
     } else {
         // If pool balance is insufficient, assign default round with 0 payout
         selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
@@ -1589,7 +1592,7 @@ app.post('/play', async (req, res) => {
     companyShares += companyContribution;
 
     // Randomly choose the next round after the game ends
-    const newNextRound = Math.floor(Math.random() * 30) + 1;  // Randomly select any round between 1 and 30
+    const newNextRound = Math.floor(Math.random() * 30) + 1;
 
     // Record the round the user got and update the capital
     await admin.database().ref(`users/${userId}`).update({
@@ -1599,7 +1602,7 @@ app.post('/play', async (req, res) => {
 
     await Promise.all([
         admin.database().ref('casinoData').update({
-            nextRound: newNextRound,  // Update the next round with the new random round
+            nextRound: newNextRound,
             casinoBalance,
             companyShares,
         }),
@@ -1610,9 +1613,10 @@ app.post('/play', async (req, res) => {
         return `${fruit.quantity}x ${fruit.type}`;
     }).join(", ");
 
-    // Calculate payout per fruit for each fruit in the round
+    // Calculate payout per fruit with applied multiplier
     let payoutPerFruit = selectedRound.fruits.map(fruit => {
-        return `${fruit.type} ${fruit.payout}`;
+        let adjusted = payoutMultiplier ? (fruit.payout * payoutMultiplier).toFixed(2) : 0;
+        return `${fruit.type} ${adjusted}`;
     }).join(", ");
 
     return res.json({
@@ -1621,8 +1625,8 @@ app.post('/play', async (req, res) => {
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: userPayout,
-        updatedCapital: updatedCapital,
+        userPayout: parseFloat(userPayout.toFixed(2)),
+        updatedCapital: parseFloat(updatedCapital.toFixed(2)),
     });
 });
 
