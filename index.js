@@ -1560,25 +1560,22 @@ app.post('/play', async (req, res) => {
     };
 
     let selectedRound = fruitsGroupedByPayout[casinoData.nextRound];
-    let userPayout = 0;
+    let basePayout = 0;
     let payoutMultiplier = 0;
-    let payoutValid = false;
 
     if (casinoData.casinoBalance >= selectedRound.totalPayout) {
         const referenceValue = 3000;
         payoutMultiplier = betAmount / referenceValue;
 
-        userPayout = selectedRound.fruits.reduce((acc, fruit) => {
+        basePayout = selectedRound.fruits.reduce((acc, fruit) => {
             return acc + (fruit.payout * fruit.quantity * payoutMultiplier);
         }, 0);
-
-        payoutValid = true;
     } else {
-        selectedRound = fruitsGroupedByPayout[1];
+        selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
     }
 
-    // Round payout to 1 decimal place before updating anything
-    userPayout = parseFloat(userPayout.toFixed(1));
+    // Now include betAmount in userPayout
+    let userPayout = basePayout + betAmount;
 
     let updatedCapital = currentCapital - betAmount + userPayout;
 
@@ -1591,7 +1588,8 @@ app.post('/play', async (req, res) => {
     casinoBalance += poolContribution;
     companyShares += companyContribution;
 
-    if (payoutValid && userPayout > 0) {
+    // Deduct the full payout (including bet) from casino pool
+    if (userPayout > 0) {
         casinoBalance -= userPayout;
     }
 
@@ -1626,7 +1624,7 @@ app.post('/play', async (req, res) => {
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: userPayout,
+        userPayout: parseFloat(userPayout.toFixed(1)),
         updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
