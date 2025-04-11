@@ -1613,10 +1613,11 @@ app.post('/play', async (req, res) => {
         return `${fruit.quantity}x ${fruit.type}`;
     }).join(", ");
 
-    // Calculate payout per fruit with applied multiplier
+    // Calculate payout per fruit with applied multiplier (formatted with 1 decimal, no .0)
     let payoutPerFruit = selectedRound.fruits.map(fruit => {
-        let adjusted = payoutMultiplier ? (fruit.payout * payoutMultiplier).toFixed(2) : 0;
-        return `${fruit.type} ${adjusted}`;
+        let adjusted = payoutMultiplier ? fruit.payout * payoutMultiplier : 0;
+        let formatted = adjusted % 1 === 0 ? adjusted.toFixed(0) : adjusted.toFixed(1);
+        return `${fruit.type} ${formatted}`;
     }).join(", ");
 
     return res.json({
@@ -1625,10 +1626,11 @@ app.post('/play', async (req, res) => {
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: parseFloat(userPayout.toFixed(2)),
-        updatedCapital: parseFloat(updatedCapital.toFixed(2)),
+        userPayout: parseFloat(userPayout.toFixed(1)),
+        updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
+
 
 
 
