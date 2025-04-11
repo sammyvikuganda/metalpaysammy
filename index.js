@@ -1608,9 +1608,14 @@ app.post('/play', async (req, res) => {
         selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
     }
 
-    // Now include betAmount in userPayout
-    let userPayout = basePayout + betAmount;
+    // Adjust the user payout based on whether they win or lose
+    let userPayout = basePayout;
+    if (userPayout > 0) {
+        // If user wins, include the bet amount in the payout
+        userPayout += betAmount;
+    }
 
+    // Capital update logic based on win or loss
     let updatedCapital = currentCapital - betAmount + userPayout;
 
     let casinoBalance = casinoData.casinoBalance || 0;
@@ -1622,7 +1627,7 @@ app.post('/play', async (req, res) => {
     casinoBalance += poolContribution;
     companyShares += companyContribution;
 
-    // Deduct the full payout (including bet) from casino pool
+    // Deduct the full payout (including bet) from the casino pool
     if (userPayout > 0) {
         casinoBalance -= userPayout;
     }
@@ -1662,7 +1667,6 @@ app.post('/play', async (req, res) => {
         updatedCapital: parseFloat(updatedCapital.toFixed(1)),
     });
 });
-
 
 
 
