@@ -1629,7 +1629,14 @@ app.post('/play', async (req, res) => {
 
     // Deduct the full payout (including bet) from the casino pool
     if (userPayout > 0) {
-        casinoBalance -= userPayout;
+        const projectedBalance = casinoBalance - userPayout;
+        if (projectedBalance >= 1000) {
+            casinoBalance = projectedBalance;
+        } else {
+            // Not enough in pool to pay out, default to no payout
+            userPayout = 0;
+            updatedCapital = currentCapital - betAmount;
+        }
     }
 
     const newNextRound = Math.floor(Math.random() * 30) + 1;
