@@ -1626,22 +1626,22 @@ app.post('/play', async (req, res) => {
     casinoBalance += poolContribution;
     companyShares += companyContribution;
 
-    // Deduct the full payout (including bet) from the casino pool
-    if (userPayout > 0) {
-        if (casinoBalance - userPayout >= 1000) {
-            casinoBalance -= userPayout;
-        } else {
-            userPayout = 0;
-            updatedCapital = currentCapital - betAmount;
-        }
+    // Ensure the casino balance does not go below the minimum threshold (1000)
+    if (casinoBalance - userPayout < 1000) {
+        userPayout = 0; // Set user payout to 0 if it would cause the casino balance to go below 1000
     }
 
-    // Convert to integer before updating DB to avoid decimals
+    // Deduct the full payout (including bet) from the casino pool, but with the check in place
+    if (userPayout > 0) {
+        casinoBalance -= userPayout;
+    }
+
+    const newNextRound = Math.floor(Math.random() * 30) + 1;
+
+    // Convert to integers before saving to database (no decimals)
     const capitalInt = Math.floor(updatedCapital);
     const casinoBalanceInt = Math.floor(casinoBalance);
     const companySharesInt = Math.floor(companyShares);
-
-    const newNextRound = Math.floor(Math.random() * 30) + 1;
 
     await admin.database().ref(`users/${userId}`).update({
         casinoRound: casinoData.nextRound,
@@ -1672,10 +1672,11 @@ app.post('/play', async (req, res) => {
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: Math.floor(userPayout),
-        updatedCapital: capitalInt,
+        userPayout: Math.floor(userPayout), // Rounded to integer
+        updatedCapital: capitalInt, // Rounded to integer
     });
 });
+
 
 
 
