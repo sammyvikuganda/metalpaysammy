@@ -1596,49 +1596,48 @@ app.post('/play', async (req, res) => {
     let selectedRound = fruitsGroupedByPayout[casinoData.nextRound];
     let basePayout = 0;
     let payoutMultiplier = 0;
+    let userPayout = 0;
 
-    if (casinoData.casinoBalance >= selectedRound.totalPayout) {
-        const referenceValue = 3000;
-        payoutMultiplier = betAmount / referenceValue;
+    const referenceValue = 3000;
+    payoutMultiplier = betAmount / referenceValue;
 
-        basePayout = selectedRound.fruits.reduce((acc, fruit) => {
-            return acc + (fruit.payout * fruit.quantity * payoutMultiplier);
-        }, 0);
-    } else {
-        selectedRound = fruitsGroupedByPayout[1]; // Default round with 0 payout
+    basePayout = selectedRound.fruits.reduce((acc, fruit) => {
+        return acc + (fruit.payout * fruit.quantity * payoutMultiplier);
+    }, 0);
+
+    if (basePayout > 0) {
+        userPayout = basePayout + betAmount;
     }
 
-    // Adjust the user payout based on whether they win or lose
-    let userPayout = basePayout;
-    if (userPayout > 0) {
-        userPayout += betAmount;
-    }
-
-    // Capital update logic based on win or loss
-    let updatedCapital = currentCapital - betAmount + userPayout;
-
+    // Calculate projected casino balance BEFORE payout
     let casinoBalance = casinoData.casinoBalance || 0;
     let companyShares = casinoData.companyShares || 0;
 
     const poolContribution = betAmount * 0.9;
     const companyContribution = betAmount * 0.1;
 
+    let projectedBalance = casinoBalance + poolContribution - userPayout;
+
+    // If payout breaks the minimum pool balance, switch to default round (no payout)
+    const MIN_POOL_BALANCE = 1000;
+    if (userPayout > 0 && projectedBalance < MIN_POOL_BALANCE) {
+        selectedRound = fruitsGroupedByPayout[1]; // no payout round
+        basePayout = 0;
+        payoutMultiplier = 0;
+        userPayout = 0;
+        projectedBalance = casinoBalance + poolContribution; // update projection
+    }
+
+    let updatedCapital = currentCapital - betAmount + userPayout;
     casinoBalance += poolContribution;
     companyShares += companyContribution;
 
-    // Ensure the casino balance does not go below the minimum threshold (1000)
-    if (casinoBalance - userPayout < 1000) {
-        userPayout = 0; // Set user payout to 0 if it would cause the casino balance to go below 1000
-    }
-
-    // Deduct the full payout (including bet) from the casino pool, but with the check in place
     if (userPayout > 0) {
         casinoBalance -= userPayout;
     }
 
     const newNextRound = Math.floor(Math.random() * 30) + 1;
 
-    // Convert to integers before saving to database (no decimals)
     const capitalInt = Math.floor(updatedCapital);
     const casinoBalanceInt = Math.floor(casinoBalance);
     const companySharesInt = Math.floor(companyShares);
@@ -1672,8 +1671,8 @@ app.post('/play', async (req, res) => {
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: Math.floor(userPayout), // Rounded to integer
-        updatedCapital: capitalInt, // Rounded to integer
+        userPayout: Math.floor(userPayout),
+        updatedCapital: capitalInt,
     });
 });
 
