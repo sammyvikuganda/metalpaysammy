@@ -1611,7 +1611,6 @@ app.post('/play', async (req, res) => {
     // Adjust the user payout based on whether they win or lose
     let userPayout = basePayout;
     if (userPayout > 0) {
-        // If user wins, include the bet amount in the payout
         userPayout += betAmount;
     }
 
@@ -1629,28 +1628,31 @@ app.post('/play', async (req, res) => {
 
     // Deduct the full payout (including bet) from the casino pool
     if (userPayout > 0) {
-        const projectedBalance = casinoBalance - userPayout;
-        if (projectedBalance >= 1000) {
-            casinoBalance = projectedBalance;
+        if (casinoBalance - userPayout >= 1000) {
+            casinoBalance -= userPayout;
         } else {
-            // Not enough in pool to pay out, default to no payout
             userPayout = 0;
             updatedCapital = currentCapital - betAmount;
         }
     }
 
+    // Convert to integer before updating DB to avoid decimals
+    const capitalInt = Math.floor(updatedCapital);
+    const casinoBalanceInt = Math.floor(casinoBalance);
+    const companySharesInt = Math.floor(companyShares);
+
     const newNextRound = Math.floor(Math.random() * 30) + 1;
 
     await admin.database().ref(`users/${userId}`).update({
         casinoRound: casinoData.nextRound,
-        capital: updatedCapital,
+        capital: capitalInt,
     });
 
     await Promise.all([
         admin.database().ref('casinoData').update({
             nextRound: newNextRound,
-            casinoBalance,
-            companyShares,
+            casinoBalance: casinoBalanceInt,
+            companyShares: companySharesInt,
         }),
     ]);
 
@@ -1670,11 +1672,10 @@ app.post('/play', async (req, res) => {
         round: casinoData.nextRound,
         roundDetails: roundDetails,
         payoutPerFruit: payoutPerFruit,
-        userPayout: parseFloat(userPayout.toFixed(1)),
-        updatedCapital: parseFloat(updatedCapital.toFixed(1)),
+        userPayout: Math.floor(userPayout),
+        updatedCapital: capitalInt,
     });
 });
-
 
 
 
