@@ -1539,6 +1539,109 @@ app.post('/play-lucky-3', (req, res) => {
 
 
 
+app.post('/play-lucky-3', async (req, res) => {
+    const { userId, amount, numbers } = req.body;
+
+    if (!userId || !amount || !Array.isArray(numbers) || numbers.length !== 3) {
+        return res.status(400).json({ error: 'Invalid input. Provide userId, amount, and 3 numbers.' });
+    }
+
+    try {
+        const db = admin.database();
+        const userRef = db.ref(`users/${userId}`);
+        const userSnapshot = await userRef.once('value');
+        const userData = userSnapshot.val();
+
+        if (!userData || typeof userData.capital !== 'number') {
+            return res.status(400).json({ error: 'User not found or capital not defined.' });
+        }
+
+        if (userData.capital < amount) {
+            return res.status(400).json({ error: 'Insufficient balance.' });
+        }
+
+        // Deduct capital
+        let updatedCapital = userData.capital - amount;
+
+        // Allocate to luckyPool and luckyShare
+        const luckyPoolAmount = amount * 0.9;
+        const luckyShareAmount = amount * 0.1;
+
+        const luckyRef = db.ref('lucky3');
+        const luckySnapshot = await luckyRef.once('value');
+        const luckyData = luckySnapshot.val() || {};
+
+        let currentPool = luckyData.luckyPool || 0;
+        let currentShare = luckyData.luckyShare || 0;
+
+        let round = Math.floor(Math.random() * 40) + 1;
+        let drawnNumbers = positionChances[round];
+        let matchedNumbers = numbers.filter(n => drawnNumbers.includes(n));
+
+        // Determine earnings
+        let earnings = 0;
+        let message = "You Lose!";
+        const matchCount = matchedNumbers.length;
+
+        if (matchCount === 1) {
+            earnings = amount * 1.5;
+        } else if (matchCount === 2) {
+            earnings = amount * 3;
+        } else if (matchCount === 3) {
+            earnings = amount * 5;
+        }
+
+        if (earnings > 0) {
+            if (currentPool >= earnings) {
+                // Payout possible
+                updatedCapital += earnings;
+                currentPool -= earnings;
+                message = "You Win!";
+            } else {
+                // Force lose — find a new round with no matches
+                message = "You Lose!";
+                earnings = 0;
+
+                let tries = 0;
+                while (matchedNumbers.length > 0 && tries < 10) {
+                    round = Math.floor(Math.random() * 40) + 1;
+                    drawnNumbers = positionChances[round];
+                    matchedNumbers = numbers.filter(n => drawnNumbers.includes(n));
+                    tries++;
+                }
+            }
+        }
+
+        // Update lucky3 shared data
+        currentPool += luckyPoolAmount;
+        currentShare += luckyShareAmount;
+
+        await luckyRef.update({
+            luckyPool: currentPool,
+            luckyShare: currentShare
+        });
+
+        // Update user with deducted/earned capital and new lucky round
+        await userRef.update({
+            capital: updatedCapital,
+            luckyRound: round
+        });
+
+        res.status(200).json({
+            round,
+            drawnNumbers,
+            matchedNumbers,
+            earnings,
+            message
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
