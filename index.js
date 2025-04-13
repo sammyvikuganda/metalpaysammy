@@ -1505,6 +1505,10 @@ app.post('/play-lucky-3', async (req, res) => {
         // Deduct capital
         let updatedCapital = userData.capital - amount;
 
+        // Track the total amount the user has paid for the game
+        let luckyPaid = userData.luckyPaid || 0;
+        luckyPaid += amount;
+
         // Allocate to luckyPool and luckyShare
         const luckyPoolAmount = amount * 0.9;
         const luckyShareAmount = amount * 0.1;
@@ -1568,10 +1572,11 @@ app.post('/play-lucky-3', async (req, res) => {
             nextNumber: nextRound // Update the next round number
         });
 
-        // Update user with deducted/earned capital and new lucky round
+        // Update user with deducted/earned capital, new lucky round, and the total paid amount
         await userRef.update({
             capital: updatedCapital,
-            luckyRound: round
+            luckyRound: round,
+            luckyPaid: luckyPaid // Update the total amount paid
         });
 
         res.status(200).json({
