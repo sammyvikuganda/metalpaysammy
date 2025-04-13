@@ -34,21 +34,48 @@ app.use(express.json());
 
 
 // Chance mapping based on position
- const positionChances = {
-    1: 3,
-    3: 0,
-    5: 1,
-    7: 0,
-    9: 4,
-    2: 15,
-    4: 30,
-    6: 50,
-    8: 60,
-    10: 70,
-    12: 0,
-    14: 5
+const positionChances = {
+    1: [8, 3, 4],
+    2: [5, 7, 1],
+    3: [2, 8, 9],
+    4: [9, 6, 3],
+    5: [7, 4, 1],
+    6: [2, 3, 7],
+    7: [5, 1, 6],
+    8: [3, 9, 4],
+    9: [6, 2, 8],
+    10: [1, 4, 5],
+    11: [9, 3, 2],
+    12: [7, 8, 5],
+    13: [4, 1, 6],
+    14: [8, 9, 2],
+    15: [1, 7, 3],
+    16: [6, 2, 8],
+    17: [5, 9, 4],
+    18: [3, 7, 1],
+    19: [8, 6, 5],
+    20: [2, 4, 9],
+    21: [7, 1, 8],
+    22: [3, 5, 4],
+    23: [9, 2, 1],
+    24: [4, 6, 7],
+    25: [1, 9, 5],
+    26: [6, 7, 2],
+    27: [8, 5, 3],
+    28: [4, 1, 9],
+    29: [2, 8, 6],
+    30: [7, 3, 4],
+    31: [5, 1, 2],
+    32: [9, 4, 6],
+    33: [2, 5, 7],
+    34: [8, 1, 3],
+    35: [9, 2, 4],
+    36: [7, 5, 8],
+    37: [3, 9, 1],
+    38: [4, 7, 6],
+    39: [6, 2, 5],
+    40: [1, 8, 9]
 };
-
 
 
 // The "fruitsGroupedByPayout" object represents the payout structure for each round
@@ -1307,232 +1334,6 @@ app.get('/api/transaction-history/:userId', async (req, res) => {
 
 
 
-// Endpoint to fetch all details in the pool data, including user earnings data
-app.get('/api/get-pool-data', async (req, res) => {
-    try {
-        const poolSnapshot = await admin.database().ref('poolData').once('value');
-        const poolData = poolSnapshot.val();
-
-        if (!poolData) {
-            return res.status(404).json({ message: 'Pool data not found' });
-        }
-
-        res.json({
-            success: true,
-            poolData
-        });
-
-    } catch (error) {
-        console.error('Error fetching pool data:', error);
-        res.status(500).json({ message: 'Error fetching pool data', error: error.message });
-    }
-});
-
-
-
-// Endpoint to Retrieve User Status
-app.get('/api/get-user-status', async (req, res) => {
-    const { userId } = req.query;  // Get userId from query parameter
-
-    if (!userId) {
-        return res.status(400).json({ message: 'UserId is required' });
-    }
-
-    try {
-        // Fetch user data from Firebase
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        // Get user information such as capital, position, downgrade losses, paid amount, etc.
-        const userStatus = {
-            capital: userData.capital || 0,
-            position: userData.position || 1,  // Default to 1 if not set
-            earnedFromPool: userData.earnedFromPool || 0,
-            downgradeLosses: userData.downgradeLosses || 0,
-            paidAmount: userData.paidAmount || 0,  // This assumes 'paidAmount' is tracked in user data
-            loses: userData.loses || 0,
-            chances: userData.chance || 0  // Chance is stored in user data
-        };
-
-        return res.json({
-            success: true,
-            userStatus
-        });
-
-    } catch (error) {
-        console.error('Error fetching user data:', error);
-        res.status(500).json({ message: 'Error fetching user status', error: error.message });
-    }
-});
-
-
-
-// Endpoint to Place a Bet
-app.post('/api/set-custom-interest-rate', async (req, res) => {
-    const { userId, paidAmount } = req.body;
-
-    try {
-        // Check if the server is busy
-        const serverStatusSnapshot = await admin.database().ref('serverStatus').once('value');
-        const serverStatus = serverStatusSnapshot.val() || {};
-
-        if (serverStatus.busy) {
-            return res.status(503).json({ message: 'Server is busy, please try again later.' });
-        }
-
-        // Set server as busy
-        await admin.database().ref('serverStatus').set({ busy: true });
-
-        console.log('Received request for userId:', userId, 'with paidAmount:', paidAmount);
-
-        const userSnapshot = await admin.database().ref(`users/${userId}`).once('value');
-        const userData = userSnapshot.val();
-
-        if (!userData) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        if (isNaN(paidAmount) || paidAmount <= 0) {
-            return res.status(400).json({ message: 'Invalid paid amount' });
-        }
-
-        if (userData.capital < paidAmount) {
-            // Reset server status to not busy before sending the response
-            await admin.database().ref('serverStatus').set({ busy: false });
-
-            return res.status(400).json({ message: 'Insufficient capital' });
-        }
-
-        const newCapital = userData.capital - paidAmount;
-
-        const poolSnapshot = await admin.database().ref('poolData').once('value');
-        const poolData = poolSnapshot.val() || {};
-        let poolBalance = poolData.poolBalance || 0;
-        let companyEarnings = poolData.companyEarnings || 0;
-        let nextPosition = poolData.nextPosition || 1;
-
-        const companyShare = paidAmount * 0.10;
-const poolShare = paidAmount * 0.90;
-
-// Initialize downgradeLosses and updatedLoses if not already defined in userData
-let downgradeLosses = isNaN(userData.downgradeLosses) ? 0 : userData.downgradeLosses;
-let updatedLoses = isNaN(userData.loses) ? 0 : userData.loses;
-
-// New logic: Compare paid amount with pool balance BEFORE adding 90% to the pool
-if (paidAmount >= poolBalance / 2) {
-    console.log(`User ${userId} paid an amount equal to or greater than half of the pool balance. Continuing cycle.`);
-} else {
-    // Downgrade logic for all even positions (2, 4, 6, 8, 10) if paid amount is below half of pool balance
-    if (nextPosition % 2 === 0 && paidAmount < poolBalance / 2) {
-        console.log(`User ${userId} downgraded from position ${nextPosition} due to low payment.`);
-        nextPosition -= 1;  // Downgrade position by 1 (from even positions 2, 4, 6, 8, 10)
-        downgradeLosses += 1; // Track the downgrade loss
-    }
-}
-
-// Check if the user has reached 2 downgrade losses
-if (downgradeLosses === 2) {
-    // If downgrade losses are 2, assign position 12 or 14 randomly
-    const newPosition = Math.random() < 0.5 ? 12 : 14;
-    nextPosition = newPosition;
-    console.log(`User ${userId} reached 2 downgrade losses. Assigned to position ${nextPosition}.`);
-    downgradeLosses = 0;  // Reset downgrade losses after assigning position 12 or 14
-}
-
-const userPosition = nextPosition; // Save current position after potential downgrade
-
-// Increment loss counter based on odd/even position
-if (nextPosition % 2 !== 0) {
-    updatedLoses += 1;
-} else {
-    updatedLoses = 0;
-}
-
-// Trigger jackpot on 5 losses: Any amount paid triggers jackpot once losses reach 5
-let userEarnings = 0; // Initialize userEarnings variable before use
-if (updatedLoses === 5) {
-    userEarnings = poolBalance;
-    poolBalance = 0;
-    nextPosition = 1;  // Reset position to 1 after user earnings all pool balance
-    updatedLoses = 0;
-    chance = 100;
-    console.log(`User ${userId} has reached 5 losses. Jackpot triggered!`);
-} else {
-    chance = positionChances[nextPosition] || 0;
-    if (chance > 0) {
-        // Now, add 90% of the paidAmount to the poolBalance
-        poolBalance += poolShare; // Add the 90% of paid amount to pool balance
-
-        // **Calculate User's Earnings after 90% of the paidAmount is added to the pool**
-        userEarnings = (poolBalance * chance) / 100; // Earnings based on the updated pool balance
-        poolBalance -= userEarnings; // Deduct the earnings from the pool balance
-    }
-
-    // Keep the position within 1-10 and increment as per normal flow
-    nextPosition = (nextPosition % 10) + 1; // Ensure we stay in the 1-10 range
-}
-
-// Add company earnings
-companyEarnings += companyShare;
-
-// **Add the earnings directly to the user's capital**
-const newCapitalAfterEarnings = newCapital + userEarnings;
-
-await admin.database().ref(`users/${userId}`).update({
-    userId,
-    paidAmount,
-    position: userPosition, // Use the final position (after downgrade if any)
-    capital: newCapitalAfterEarnings, // Updated capital after earnings
-    loses: updatedLoses,
-    downgradeLosses, // Track downgrade losses
-    chance
-});
-
-// Add user earnings and timestamp to poolData
-const userEarningsData = poolData.userEarningsData || [];
-userEarningsData.push({
-    userId,
-    earnedAmount: userEarnings,
-    timestamp: Date.now()  // Add timestamp of the earning
-});
-
-// Update poolData
-await admin.database().ref('poolData').set({
-    poolBalance,
-    companyEarnings,
-    nextPosition,
-    userEarningsData  // Add the new data to poolData
-});
-
-
-        // Reset server status to not busy
-        await admin.database().ref('serverStatus').set({ busy: false });
-
-        res.json({
-            success: true,
-            message: `User ${userId} processed.`,
-            userEarnings,
-            poolBalance,
-            companyEarnings
-        });
-
-    } catch (error) {
-        console.error('Error processing payment:', error);
-
-        // Reset server status to not busy in case of error
-        await admin.database().ref('serverStatus').set({ busy: false });
-
-        res.status(500).json({ message: 'Error processing payment', error: error.message });
-    }
-});
-
-
-
-
 
 // Endpoint to fetch user casino capital
 app.get('/user-casino-capital/:userId', async (req, res) => {
@@ -1673,6 +1474,66 @@ app.post('/play', async (req, res) => {
         payoutPerFruit: payoutPerFruit,
         userPayout: Math.floor(userPayout),
         updatedCapital: capitalInt,
+    });
+});
+
+
+
+
+// API Endpoint for playing the game
+app.post('/play-lucky-3', (req, res) => {
+    const { userId, amount, numbers } = req.body;  // User ID, Amount the user bets, and the numbers they entered
+    if (!userId || !amount || !Array.isArray(numbers) || numbers.length !== 3) {
+        return res.status(400).json({ error: 'Invalid input. Provide userId, amount, and exactly 3 numbers.' });
+    }
+
+    // Get a random round number from 1 to 40
+    const round = Math.floor(Math.random() * 40) + 1;
+
+    // Get the drawn numbers for this round from the positionChances mapping
+    const drawnNumbers = positionChances[round];
+
+    // Checking if any number entered matches the drawn numbers
+    const matchedNumbers = numbers.filter(num => drawnNumbers.includes(num));
+    const matchedCount = matchedNumbers.length;
+
+    // Calculate earnings based on how many numbers match
+    let earnings = 0;
+    let message = "You Lose!";
+
+    if (matchedCount === 1) {
+        earnings = amount * 1.5;  // 1 matching number earns 1.5x the amount
+        message = "You Win!";
+    } else if (matchedCount === 2) {
+        earnings = amount * 3;    // 2 matching numbers earn 3x the amount
+        message = "You Win!";
+    } else if (matchedCount === 3) {
+        earnings = amount * 5;    // 3 matching numbers earn 5x the amount
+        message = "You Win!";
+    }
+
+    // Save only the lucky round in Firebase under the user's ID (no need to store numbersEntered, matchedNumbers, or earnings)
+    const userRef = admin.database().ref('users/' + userId); // Assuming the user is identified by their unique userId
+
+    // Create the data to store in Firebase (only storing lucky round)
+    const gameResult = {
+        luckyRound: round
+    };
+
+    // Update the luckyRound field for the user in the database
+    userRef.update(gameResult).then(() => {
+        // Construct the result response to send to the client
+        const result = {
+            round,
+            drawnNumbers,
+            matchedNumbers,
+            message,
+            earnings
+        };
+
+        res.status(200).json(result);  // Send the result to the client
+    }).catch((error) => {
+        res.status(500).json({ error: 'Failed to save game result to the database.' });
     });
 });
 
