@@ -1481,64 +1481,6 @@ app.post('/play', async (req, res) => {
 
 
 // API Endpoint for playing the game
-app.post('/play-lucky-3', (req, res) => {
-    const { userId, amount, numbers } = req.body;  // User ID, Amount the user bets, and the numbers they entered
-    if (!userId || !amount || !Array.isArray(numbers) || numbers.length !== 3) {
-        return res.status(400).json({ error: 'Invalid input. Provide userId, amount, and exactly 3 numbers.' });
-    }
-
-    // Get a random round number from 1 to 40
-    const round = Math.floor(Math.random() * 40) + 1;
-
-    // Get the drawn numbers for this round from the positionChances mapping
-    const drawnNumbers = positionChances[round];
-
-    // Checking if any number entered matches the drawn numbers
-    const matchedNumbers = numbers.filter(num => drawnNumbers.includes(num));
-    const matchedCount = matchedNumbers.length;
-
-    // Calculate earnings based on how many numbers match
-    let earnings = 0;
-    let message = "You Lose!";
-
-    if (matchedCount === 1) {
-        earnings = amount * 1.5;  // 1 matching number earns 1.5x the amount
-        message = "You Win!";
-    } else if (matchedCount === 2) {
-        earnings = amount * 3;    // 2 matching numbers earn 3x the amount
-        message = "You Win!";
-    } else if (matchedCount === 3) {
-        earnings = amount * 5;    // 3 matching numbers earn 5x the amount
-        message = "You Win!";
-    }
-
-    // Save only the lucky round in Firebase under the user's ID (no need to store numbersEntered, matchedNumbers, or earnings)
-    const userRef = admin.database().ref('users/' + userId); // Assuming the user is identified by their unique userId
-
-    // Create the data to store in Firebase (only storing lucky round)
-    const gameResult = {
-        luckyRound: round
-    };
-
-    // Update the luckyRound field for the user in the database
-    userRef.update(gameResult).then(() => {
-        // Construct the result response to send to the client
-        const result = {
-            round,
-            drawnNumbers,
-            matchedNumbers,
-            message,
-            earnings
-        };
-
-        res.status(200).json(result);  // Send the result to the client
-    }).catch((error) => {
-        res.status(500).json({ error: 'Failed to save game result to the database.' });
-    });
-});
-
-
-
 app.post('/play-lucky-3', async (req, res) => {
     const { userId, amount, numbers } = req.body;
 
