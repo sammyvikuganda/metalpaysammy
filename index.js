@@ -1516,7 +1516,8 @@ app.post('/play-lucky-3', async (req, res) => {
         let currentPool = luckyData.luckyPool || 0;
         let currentShare = luckyData.luckyShare || 0;
 
-        let round = Math.floor(Math.random() * 40) + 1;
+        // Get the next number for the round or generate a random one if not set
+        let round = luckyData.nextNumber || Math.floor(Math.random() * 40) + 1;
         let drawnNumbers = positionChances[round];
         let matchedNumbers = numbers.filter(n => drawnNumbers.includes(n));
 
@@ -1558,9 +1559,13 @@ app.post('/play-lucky-3', async (req, res) => {
         currentPool += luckyPoolAmount;
         currentShare += luckyShareAmount;
 
+        // Set the next round number
+        const nextRound = Math.floor(Math.random() * 40) + 1;
+
         await luckyRef.update({
             luckyPool: currentPool,
-            luckyShare: currentShare
+            luckyShare: currentShare,
+            nextNumber: nextRound // Update the next round number
         });
 
         // Update user with deducted/earned capital and new lucky round
@@ -1574,7 +1579,8 @@ app.post('/play-lucky-3', async (req, res) => {
             drawnNumbers,
             matchedNumbers,
             earnings,
-            message
+            message,
+            nextNumber: nextRound // Include next number in the response
         });
 
     } catch (err) {
