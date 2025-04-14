@@ -1502,14 +1502,13 @@ app.post('/play-lucky-3', async (req, res) => {
             return res.status(400).json({ error: 'Insufficient balance.' });
         }
 
-        // Deduct capital
+        // Deduct the amount from user's capital
         let updatedCapital = userData.capital - amount;
 
-        // Track the total amount the user has paid for the game
-        let luckyPaid = userData.luckyPaid || 0;
-        luckyPaid += amount;
+        // Store only the latest amount paid for lucky game
+        const luckyPaid = amount;
 
-        // Allocate to luckyPool and luckyShare
+        // Allocate portions
         const luckyPoolAmount = amount * 0.9;
         const luckyShareAmount = amount * 0.1;
 
@@ -1520,12 +1519,12 @@ app.post('/play-lucky-3', async (req, res) => {
         let currentPool = luckyData.luckyPool || 0;
         let currentShare = luckyData.luckyShare || 0;
 
-        // Get the next number for the round or generate a random one if not set
+        // Determine round and draw
         let round = luckyData.nextNumber || Math.floor(Math.random() * 40) + 1;
         let drawnNumbers = positionChances[round];
         let matchedNumbers = numbers.filter(n => drawnNumbers.includes(n));
 
-        // Determine earnings
+        // Calculate earnings based on matches
         let earnings = 0;
         let message = "You Lose!";
         const matchCount = matchedNumbers.length;
@@ -1540,12 +1539,11 @@ app.post('/play-lucky-3', async (req, res) => {
 
         if (earnings > 0) {
             if (currentPool >= earnings) {
-                // Payout possible
                 updatedCapital += earnings;
                 currentPool -= earnings;
                 message = "You Win!";
             } else {
-                // Force lose — find a new round with no matches
+                // Force loss - avoid payout when pool is insufficient
                 message = "You Lose!";
                 earnings = 0;
 
@@ -1559,24 +1557,23 @@ app.post('/play-lucky-3', async (req, res) => {
             }
         }
 
-        // Update lucky3 shared data
+        // Update global lucky3 data
         currentPool += luckyPoolAmount;
         currentShare += luckyShareAmount;
 
-        // Set the next round number
         const nextRound = Math.floor(Math.random() * 40) + 1;
 
         await luckyRef.update({
             luckyPool: currentPool,
             luckyShare: currentShare,
-            nextNumber: nextRound // Update the next round number
+            nextNumber: nextRound
         });
 
-        // Update user with deducted/earned capital, new lucky round, and the total paid amount
+        // Update user data
         await userRef.update({
             capital: updatedCapital,
             luckyRound: round,
-            luckyPaid: luckyPaid // Update the total amount paid
+            luckyPaid: luckyPaid
         });
 
         res.status(200).json({
@@ -1585,7 +1582,7 @@ app.post('/play-lucky-3', async (req, res) => {
             matchedNumbers,
             earnings,
             message,
-            nextNumber: nextRound // Include next number in the response
+            nextNumber: nextRound
         });
 
     } catch (err) {
