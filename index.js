@@ -1484,6 +1484,7 @@ app.post('/play', async (req, res) => {
 app.post('/play-lucky-3', async (req, res) => {
     const { userId, amount, numbers } = req.body;
 
+    // Input validation
     if (!userId || !amount || !Array.isArray(numbers) || numbers.length !== 3) {
         return res.status(400).json({ error: 'Invalid input. Provide userId, amount, and 3 numbers.' });
     }
@@ -1505,10 +1506,10 @@ app.post('/play-lucky-3', async (req, res) => {
         // Deduct the amount from user's capital
         let updatedCapital = userData.capital - amount;
 
-        // Store only the latest amount paid for lucky game
+        // Store the amount paid for the lucky game
         const luckyPaid = amount;
 
-        // Allocate portions
+        // Allocate portions to pool and share
         const luckyPoolAmount = amount * 0.9;
         const luckyShareAmount = amount * 0.1;
 
@@ -1519,8 +1520,9 @@ app.post('/play-lucky-3', async (req, res) => {
         let currentPool = luckyData.luckyPool || 0;
         let currentShare = luckyData.luckyShare || 0;
 
-        // Determine round and draw
-        let round = luckyData.nextNumber || Math.floor(Math.random() * 40) + 1;
+        // Sequential round (1 to 40 loop)
+        let round = luckyData.nextNumber || 1;
+        round = (round > 40) ? 1 : round; // Ensure it loops back to 1 after 40
         let drawnNumbers = positionChances[round];
         let matchedNumbers = numbers.filter(n => drawnNumbers.includes(n));
 
@@ -1543,13 +1545,13 @@ app.post('/play-lucky-3', async (req, res) => {
                 currentPool -= earnings;
                 message = "You Win!";
             } else {
-                // Force loss - avoid payout when pool is insufficient
+                // Force loss if pool is insufficient
                 message = "You Lose!";
                 earnings = 0;
 
                 let tries = 0;
                 while (matchedNumbers.length > 0 && tries < 10) {
-                    round = Math.floor(Math.random() * 40) + 1;
+                    round = (round % 40) + 1;
                     drawnNumbers = positionChances[round];
                     matchedNumbers = numbers.filter(n => drawnNumbers.includes(n));
                     tries++;
@@ -1557,11 +1559,12 @@ app.post('/play-lucky-3', async (req, res) => {
             }
         }
 
-        // Update global lucky3 data
+        // Update pool and share amounts
         currentPool += luckyPoolAmount;
         currentShare += luckyShareAmount;
 
-        const nextRound = Math.floor(Math.random() * 40) + 1;
+        // Set next round (sequentially)
+        let nextRound = (round % 40) + 1;
 
         await luckyRef.update({
             luckyPool: currentPool,
@@ -1569,11 +1572,11 @@ app.post('/play-lucky-3', async (req, res) => {
             nextNumber: nextRound
         });
 
-        // Update user data
+        // Update user data (capital, round, luckyPaid)
         await userRef.update({
             capital: updatedCapital,
             luckyRound: round,
-            luckyPaid: luckyPaid
+            luckyPaid: luckyPaid // Only store the latest amount paid
         });
 
         res.status(200).json({
