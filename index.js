@@ -1635,6 +1635,11 @@ app.patch('/api/update-casino-capital', async (req, res) => {
                         reason: 'withdrawal'
                     });
 
+                    // Check if the other server returned an insufficient balance error
+                    if (balanceResponse.data.message === 'Insufficient balance for withdrawal') {
+                        return res.status(400).json({ message: 'Insufficient balance for withdrawal' });
+                    }
+
                     // If balance update is successful, update the capital
                     newCapital = currentCapital + amount;
                     await userRef.update({ capital: newCapital });
@@ -1668,6 +1673,11 @@ app.patch('/api/update-casino-capital', async (req, res) => {
                         balance: currentBalance + amount,
                         reason: 'topup'
                     });
+
+                    // Check for insufficient balance response from the other server
+                    if (balanceResponse.data.message === 'Insufficient balance for withdrawal') {
+                        return res.status(400).json({ message: 'Insufficient balance for top-up' });
+                    }
 
                     res.json({
                         message: 'Casino capital withdrawn successfully',
