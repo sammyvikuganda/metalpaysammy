@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const QRCode = require('qrcode'); // Import the QR code library
@@ -1597,7 +1598,7 @@ app.post('/play-lucky-3', async (req, res) => {
 
 
 
-const axios = require('axios'); // Import Axios
+
 
 // Add/Withdraw capital endpoint
 app.patch('/api/update-casino-capital', async (req, res) => {
