@@ -1596,6 +1596,103 @@ app.post('/play-lucky-3', async (req, res) => {
 
 
 
+
+const axios = require('axios'); // Import Axios
+
+// Add/Withdraw capital endpoint
+app.patch('/api/update-casino-capital', async (req, res) => {
+    const { userId, amount, action } = req.body;
+
+    if (!userId || amount === undefined || !action) {
+        return res.status(400).json({ message: 'User ID, amount, and action (add or withdraw) are required' });
+    }
+
+    try {
+        const userRef = db.ref(`users/${userId}`);
+        const snapshot = await userRef.once('value');
+        
+        if (snapshot.exists()) {
+            const userData = snapshot.val();
+            const currentBalance = userData.balance || 0;
+            const currentCapital = userData.capital || 0;
+
+            let newBalance, newCapital;
+
+            // Action for adding to capital (deduct from balance)
+            if (action === 'add') {
+                // Ensure the balance is sufficient for the transfer
+                if (currentBalance < amount) {
+                    return res.status(400).json({ message: 'Insufficient balance to add to casino capital' });
+                }
+
+                // Deduct from balance using the other server's endpoint (with Axios)
+                try {
+                    const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
+                        userId: userId,
+                        balance: currentBalance - amount,
+                        reason: 'withdrawal'
+                    });
+
+                    // If balance update is successful, update the capital
+                    newCapital = currentCapital + amount;
+                    await userRef.update({ capital: newCapital });
+
+                    res.json({
+                        message: 'Casino capital updated successfully',
+                        newBalance: balanceResponse.data.newBalance,
+                        newCapital
+                    });
+                } catch (balanceError) {
+                    return res.status(balanceError.response.status).json({
+                        message: balanceError.response.data.message || 'Error updating balance'
+                    });
+                }
+
+            // Action for withdrawing from capital (add to balance)
+            } else if (action === 'withdraw') {
+                // Ensure there is enough capital to withdraw
+                if (currentCapital < amount) {
+                    return res.status(400).json({ message: 'Insufficient casino capital for withdrawal' });
+                }
+
+                // Deduct from capital (update casino capital)
+                newCapital = currentCapital - amount;
+                await userRef.update({ capital: newCapital });
+
+                // Add to balance using the other server's endpoint (with Axios)
+                try {
+                    const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
+                        userId: userId,
+                        balance: currentBalance + amount,
+                        reason: 'topup'
+                    });
+
+                    res.json({
+                        message: 'Casino capital withdrawn successfully',
+                        newBalance: balanceResponse.data.newBalance,
+                        newCapital: newCapital
+                    });
+                } catch (balanceError) {
+                    return res.status(balanceError.response.status).json({
+                        message: balanceError.response.data.message || 'Error updating balance'
+                    });
+                }
+
+            } else {
+                return res.status(400).json({ message: 'Invalid action. Only "add" or "withdraw" are allowed.' });
+            }
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        console.error('Error updating casino capital:', error); // Log the error
+        res.status(500).json({ message: 'Error updating casino capital', error: error.message });
+    }
+});
+
+
+
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
