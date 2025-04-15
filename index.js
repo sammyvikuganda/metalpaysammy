@@ -17,6 +17,8 @@ admin.initializeApp({
     databaseURL: "https://metal-pay-55c31-default-rtdb.firebaseio.com/",
 });
 
+const db = admin.database();
+
 // Middleware
 app.use(cors());
 app.use(express.json());
