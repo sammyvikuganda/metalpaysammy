@@ -1612,96 +1612,78 @@ app.patch('/api/update-casino-capital', async (req, res) => {
     try {
         const userRef = db.ref(`users/${userId}`);
         const snapshot = await userRef.once('value');
-        
-        if (snapshot.exists()) {
-            const userData = snapshot.val();
-            const currentBalance = userData.balance || 0;
-            const currentCapital = userData.capital || 0;
 
-            let newBalance, newCapital;
+        if (!snapshot.exists()) {
+            return res.status(404).json({ message: 'User not found' });
+        }
 
-            // Action for adding to capital (deduct from balance)
-            if (action === 'add') {
-                // Ensure the balance is sufficient for the transfer
-                if (currentBalance < amount) {
-                    return res.status(400).json({ message: 'Insufficient balance to add to casino capital' });
+        const userData = snapshot.val();
+        const currentBalance = userData.balance || 0;
+        const currentCapital = userData.capital || 0;
+
+        let newBalance, newCapital;
+
+        if (action === 'add') {
+            // Directly try to withdraw from the other server
+            try {
+                const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
+                    userId,
+                    balance: currentBalance - amount,
+                    reason: 'withdrawal'
+                });
+
+                if (balanceResponse.data.message === 'Insufficient balance for withdrawal') {
+                    return res.status(400).json({ message: 'Insufficient balance for withdrawal' });
                 }
 
-                // Deduct from balance using the other server's endpoint (with Axios)
-                try {
-                    const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
-                        userId: userId,
-                        balance: currentBalance - amount,
-                        reason: 'withdrawal'
-                    });
-
-                    // Check if the other server returned an insufficient balance error
-                    if (balanceResponse.data.message === 'Insufficient balance for withdrawal') {
-                        return res.status(400).json({ message: 'Insufficient balance for withdrawal' });
-                    }
-
-                    // If balance update is successful, update the capital
-                    newCapital = currentCapital + amount;
-                    await userRef.update({ capital: newCapital });
-
-                    res.json({
-                        message: 'Casino capital updated successfully',
-                        newBalance: balanceResponse.data.newBalance,
-                        newCapital
-                    });
-                } catch (balanceError) {
-                    return res.status(balanceError.response.status).json({
-                        message: balanceError.response.data.message || 'Error updating balance'
-                    });
-                }
-
-            // Action for withdrawing from capital (add to balance)
-            } else if (action === 'withdraw') {
-                // Ensure there is enough capital to withdraw
-                if (currentCapital < amount) {
-                    return res.status(400).json({ message: 'Insufficient casino capital for withdrawal' });
-                }
-
-                // Deduct from capital (update casino capital)
-                newCapital = currentCapital - amount;
+                newCapital = currentCapital + amount;
                 await userRef.update({ capital: newCapital });
 
-                // Add to balance using the other server's endpoint (with Axios)
-                try {
-                    const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
-                        userId: userId,
-                        balance: currentBalance + amount,
-                        reason: 'topup'
-                    });
-
-                    // Check for insufficient balance response from the other server
-                    if (balanceResponse.data.message === 'Insufficient balance for withdrawal') {
-                        return res.status(400).json({ message: 'Insufficient balance for top-up' });
-                    }
-
-                    res.json({
-                        message: 'Casino capital withdrawn successfully',
-                        newBalance: balanceResponse.data.newBalance,
-                        newCapital: newCapital
-                    });
-                } catch (balanceError) {
-                    return res.status(balanceError.response.status).json({
-                        message: balanceError.response.data.message || 'Error updating balance'
-                    });
-                }
-
-            } else {
-                return res.status(400).json({ message: 'Invalid action. Only "add" or "withdraw" are allowed.' });
+                res.json({
+                    message: 'Casino capital updated successfully',
+                    newBalance: balanceResponse.data.newBalance,
+                    newCapital
+                });
+            } catch (balanceError) {
+                return res.status(balanceError.response?.status || 500).json({
+                    message: balanceError.response?.data?.message || 'Error updating balance'
+                });
             }
+
+        } else if (action === 'withdraw') {
+            if (currentCapital < amount) {
+                return res.status(400).json({ message: 'Insufficient casino capital for withdrawal' });
+            }
+
+            newCapital = currentCapital - amount;
+            await userRef.update({ capital: newCapital });
+
+            try {
+                const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
+                    userId,
+                    balance: currentBalance + amount,
+                    reason: 'topup'
+                });
+
+                res.json({
+                    message: 'Casino capital withdrawn successfully',
+                    newBalance: balanceResponse.data.newBalance,
+                    newCapital
+                });
+            } catch (balanceError) {
+                return res.status(balanceError.response?.status || 500).json({
+                    message: balanceError.response?.data?.message || 'Error updating balance'
+                });
+            }
+
         } else {
-            res.status(404).json({ message: 'User not found' });
+            return res.status(400).json({ message: 'Invalid action. Only "add" or "withdraw" are allowed.' });
         }
     } catch (error) {
-        console.error('Error updating casino capital:', error); // Log the error
+        console.error('Error updating casino capital:', error);
         res.status(500).json({ message: 'Error updating casino capital', error: error.message });
     }
 });
-
 
 
 
