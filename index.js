@@ -1618,17 +1618,15 @@ app.patch('/api/update-casino-capital', async (req, res) => {
         }
 
         const userData = snapshot.val();
-        const currentBalance = userData.balance || 0;
         const currentCapital = userData.capital || 0;
-
-        let newBalance, newCapital;
+        let newCapital;
 
         if (action === 'add') {
-            // Directly try to withdraw from the other server
             try {
+                // Withdraw from external balance
                 const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
                     userId,
-                    balance: currentBalance - amount,
+                    balance: amount,
                     reason: 'withdrawal'
                 });
 
@@ -1661,7 +1659,7 @@ app.patch('/api/update-casino-capital', async (req, res) => {
             try {
                 const balanceResponse = await axios.patch('https://suppay-a04mnfq64-nexus-int.vercel.app/api/update-balance', {
                     userId,
-                    balance: currentBalance + amount,
+                    balance: amount,
                     reason: 'topup'
                 });
 
@@ -1684,6 +1682,7 @@ app.patch('/api/update-casino-capital', async (req, res) => {
         res.status(500).json({ message: 'Error updating casino capital', error: error.message });
     }
 });
+
 
 
 
