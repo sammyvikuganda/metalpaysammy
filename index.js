@@ -1599,7 +1599,6 @@ app.post('/play-lucky-3', async (req, res) => {
 
 
 
-
 // Add/Withdraw capital endpoint
 app.patch('/api/update-casino-capital', async (req, res) => {
     const { userId, amount, action } = req.body;
@@ -1690,6 +1689,7 @@ app.patch('/api/update-casino-capital', async (req, res) => {
         res.status(500).json({ message: 'Error updating casino capital', error: error.message });
     }
 });
+
 
 
 
