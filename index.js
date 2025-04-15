@@ -1631,7 +1631,7 @@ app.patch('/api/update-casino-capital', async (req, res) => {
                 });
 
                 if (balanceResponse.data.message === 'Insufficient balance for withdrawal') {
-                    return res.status(400).json({ message: 'Insufficient balance for withdrawal' });
+                    return res.status(400).json({ message: 'Insufficient balance from main wallet' }); // Updated error message
                 }
 
                 newCapital = currentCapital + amount;
@@ -1649,8 +1649,9 @@ app.patch('/api/update-casino-capital', async (req, res) => {
             }
 
         } else if (action === 'withdraw') {
+            // Check if there is enough capital to withdraw
             if (currentCapital < amount) {
-                return res.status(400).json({ message: 'Insufficient casino capital for withdrawal' });
+                return res.status(400).json({ message: 'Insufficient Earnings' });
             }
 
             newCapital = currentCapital - amount;
