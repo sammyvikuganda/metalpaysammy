@@ -1687,7 +1687,9 @@ app.patch('/api/update-casino-capital', async (req, res) => {
 
 
 
-// Store Investment
+
+
+// Store or update investment
 app.post('/storeInvestment', async (req, res) => {
     try {
         const { userId, amount } = req.body;
@@ -1695,83 +1697,81 @@ app.post('/storeInvestment', async (req, res) => {
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        const transactionId = `NXS${Math.floor(1000000 + Math.random() * 9000000)}`;
         const now = new Date();
+        const investmentRef = db.ref(`users/${userId}/investment`);
+        const snapshot = await investmentRef.once('value');
 
-        const investmentData = {
-            transactionId,
-            amount,
-            investmentBalance: amount,
-            payout: 0,
-            lastUpdated: now.toISOString(),
-            startDate: now.toISOString().split('T')[0]
-        };
+        if (snapshot.exists()) {
+            const existing = snapshot.val();
+            const newAmount = existing.amount + amount;
+            await investmentRef.update({
+                amount: newAmount,
+                investmentBalance: newAmount,
+                lastUpdated: now.toISOString()
+            });
+        } else {
+            await investmentRef.set({
+                amount,
+                investmentBalance: amount,
+                payout: 0,
+                lastUpdated: now.toISOString(),
+                startDate: now.toISOString().split('T')[0]
+            });
+        }
 
-        await db.ref(`users/${userId}/investments/${transactionId}`).set(investmentData);
-        res.status(200).json({ message: 'Investment stored successfully', transactionId });
+        res.status(200).json({ message: 'Investment stored/updated successfully' });
     } catch (error) {
         console.error('Error storing investment:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
-// Fetch & Update Investment
+// Fetch and update investment
 app.get('/fetchInvestment/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
-        const userInvestmentsRef = db.ref(`users/${userId}/investments`);
-        const snapshot = await userInvestmentsRef.once('value');
+        const investmentRef = db.ref(`users/${userId}/investment`);
+        const snapshot = await investmentRef.once('value');
 
         if (!snapshot.exists()) {
-            return res.status(404).json({ message: 'No investments found for this user' });
+            return res.status(404).json({ message: 'No investment found for this user' });
         }
 
-        const investments = snapshot.val();
+        const investment = snapshot.val();
         const currentTime = new Date();
-        const updatedInvestments = [];
+        const lastUpdated = new Date(investment.lastUpdated);
+        const timeDiff = currentTime - lastUpdated;
+        const daysPassed = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        let totalPayout = investment.payout || 0;
+        const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
 
-        for (const [transactionId, investment] of Object.entries(investments)) {
-            const lastUpdated = new Date(investment.lastUpdated);
-            const timeDiff = currentTime - lastUpdated;
-            const daysPassed = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-            const transactionsToAdd = [];
-            let totalPayout = investment.payout || 0;
-
-            for (let i = 1; i <= daysPassed; i++) {
-                const txDate = new Date(lastUpdated);
-                txDate.setDate(txDate.getDate() + i);
-                const txTime = txDate.toISOString();
-
-                // 10% daily of the original investment balance (not reduced)
-                const dailyIncome = parseFloat((investment.amount * 0.10).toFixed(2));
-                totalPayout = parseFloat((totalPayout + dailyIncome).toFixed(2));
-
-                transactionsToAdd.push({ amount: dailyIncome, time: txTime });
-            }
-
-            await db.ref(`users/${userId}/investments/${transactionId}/payout`).set(totalPayout);
-            await db.ref(`users/${userId}/investments/${transactionId}/lastUpdated`).set(currentTime.toISOString());
-
-            for (const tx of transactionsToAdd) {
-                await db.ref(`users/${userId}/investments/${transactionId}/transactions`).push(tx);
-            }
-
-            const txSnapshot = await db.ref(`users/${userId}/investments/${transactionId}/transactions`).once('value');
-            const txHistory = txSnapshot.exists() ? Object.values(txSnapshot.val()) : [];
-
-            updatedInvestments.push({
-                transactionId,
-                amount: investment.amount,
-                investmentBalance: investment.amount,  // Balance remains the same
-                payout: totalPayout,
-                startDate: investment.startDate,
-                transactions: txHistory
-            });
+        for (let i = 1; i <= daysPassed; i++) {
+            const txDate = new Date(lastUpdated);
+            txDate.setDate(txDate.getDate() + i);
+            const txTime = txDate.toISOString();
+            const dailyIncome = parseFloat((investment.amount * 0.01).toFixed(2));
+            totalPayout = parseFloat((totalPayout + dailyIncome).toFixed(2));
+            await transactionsRef.push({ amount: dailyIncome, time: txTime });
         }
 
-        res.status(200).json(updatedInvestments);
+        await investmentRef.update({
+            payout: totalPayout,
+            lastUpdated: currentTime.toISOString()
+        });
+
+        const txSnapshot = await transactionsRef.once('value');
+        const txHistory = txSnapshot.exists() ? Object.values(txSnapshot.val()) : [];
+
+        res.status(200).json({
+            userId,
+            amount: investment.amount,
+            investmentBalance: investment.investmentBalance,
+            payout: totalPayout,
+            startDate: investment.startDate,
+            transactions: txHistory
+        });
     } catch (error) {
-        console.error('Error fetching investments:', error);
+        console.error('Error fetching investment:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
