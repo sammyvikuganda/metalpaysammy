@@ -1691,7 +1691,7 @@ app.patch('/api/update-casino-capital', async (req, res) => {
 // Store or update investment
 app.post('/storeInvestment', async (req, res) => {
     try {
-        const { userId, amount } = req.body;
+        const { userId, amount, premium = 0 } = req.body;  // Default premium is 0 if not provided
         if (!userId || !amount) {
             return res.status(400).json({ message: 'Missing required fields' });
         }
@@ -1707,13 +1707,15 @@ app.post('/storeInvestment', async (req, res) => {
             const newAmount = existing.amount + amount;
             await investmentRef.update({
                 amount: newAmount,
-                lastUpdated: nowISO
+                lastUpdated: nowISO,
+                premium,  // Store premium value in the database
             });
         } else {
             await investmentRef.set({
                 amount,
                 payout: 0,
                 lastUpdated: nowISO,
+                premium,  // Store premium value for the new investment
                 startDate: nowISO.split('T')[0]
             });
         }
@@ -1749,6 +1751,7 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
         let lastUpdated = new Date(investment.lastUpdated);
         const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
         let totalPayout = investment.payout || 0;
+        const premium = investment.premium || 0;  // Default premium is 0 if not found
 
         // Calculate how many full 24-hour periods have passed
         let payoutCount = 0;
@@ -1756,7 +1759,8 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
             payoutCount++;
             lastUpdated = new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
 
-            const dailyIncome = parseFloat((investment.amount * 0.01).toFixed(2));
+            // Use the premium percentage in payout calculation (default to 1% if premium is 0)
+            const dailyIncome = parseFloat((investment.amount * (premium / 100)).toFixed(2));
             totalPayout = parseFloat((totalPayout + dailyIncome).toFixed(2));
 
             await transactionsRef.push({
@@ -1782,6 +1786,8 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
             amount: investment.amount,
             payout: totalPayout,
             startDate: investment.startDate,
+            lastUpdated: investment.lastUpdated,  // Include lastUpdated
+            premium,  // Include premium in the response
             transactions: txHistory
         });
     } catch (error) {
