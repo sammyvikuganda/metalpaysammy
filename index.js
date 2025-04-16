@@ -1759,8 +1759,8 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
             payoutCount++;
             lastUpdated = new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
 
-            // Use the premium percentage in payout calculation (default to 1% if premium is 0)
-            const dailyIncome = parseFloat((investment.amount * (premium / 100)).toFixed(2));
+            // If premium is 0, use 1% (0.01) for the daily income calculation
+            const dailyIncome = parseFloat((investment.amount * (premium > 0 ? premium / 100 : 0.01)).toFixed(2));
             totalPayout = parseFloat((totalPayout + dailyIncome).toFixed(2));
 
             await transactionsRef.push({
@@ -1795,6 +1795,7 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 });
+
 
 
 
