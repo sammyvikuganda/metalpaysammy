@@ -1736,31 +1736,33 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
 
         const investment = snapshot.val();
         const currentTime = new Date();
-        const lastUpdated = new Date(investment.lastUpdated);
-        const timeDiff = currentTime - lastUpdated;
-        const daysPassed = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-        let totalPayout = investment.payout || 0;
+        let lastUpdated = new Date(investment.lastUpdated);
         const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
+        let totalPayout = investment.payout || 0;
 
-        for (let i = 1; i <= daysPassed; i++) {
-            const txDate = new Date(lastUpdated);
-            txDate.setDate(txDate.getDate() + i);
-            const txTime = txDate.toISOString();
+        // Calculate how many full 24-hour periods have passed
+        let payoutCount = 0;
+        while ((currentTime - lastUpdated) >= 24 * 60 * 60 * 1000) {
+            payoutCount++;
+            lastUpdated = new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
+
             const dailyIncome = parseFloat((investment.amount * 0.01).toFixed(2));
             totalPayout = parseFloat((totalPayout + dailyIncome).toFixed(2));
 
-            // Store each transaction with amount, time, and reason
             await transactionsRef.push({
                 amount: dailyIncome,
-                time: txTime,
+                time: lastUpdated.toISOString(),
                 reason: "Commission paid"
             });
         }
 
-        await investmentRef.update({
-            payout: totalPayout,
-            lastUpdated: currentTime.toISOString()
-        });
+        // Only update if there was a payout
+        if (payoutCount > 0) {
+            await investmentRef.update({
+                payout: totalPayout,
+                lastUpdated: lastUpdated.toISOString()
+            });
+        }
 
         const txSnapshot = await transactionsRef.once('value');
         const txHistory = txSnapshot.exists() ? Object.values(txSnapshot.val()) : [];
