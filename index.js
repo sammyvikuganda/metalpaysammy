@@ -1697,7 +1697,9 @@ app.post('/storeInvestment', async (req, res) => {
         }
 
         const now = new Date();
+        const nowISO = now.toISOString();
         const investmentRef = db.ref(`users/${userId}/investment`);
+        const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
         const snapshot = await investmentRef.once('value');
 
         if (snapshot.exists()) {
@@ -1705,16 +1707,23 @@ app.post('/storeInvestment', async (req, res) => {
             const newAmount = existing.amount + amount;
             await investmentRef.update({
                 amount: newAmount,
-                lastUpdated: now.toISOString()
+                lastUpdated: nowISO
             });
         } else {
             await investmentRef.set({
                 amount,
                 payout: 0,
-                lastUpdated: now.toISOString(),
-                startDate: now.toISOString().split('T')[0]
+                lastUpdated: nowISO,
+                startDate: nowISO.split('T')[0]
             });
         }
+
+        // Log the investment transaction
+        await transactionsRef.push({
+            amount,
+            time: nowISO,
+            reason: 'Investment added'
+        });
 
         res.status(200).json({ message: 'Investment stored/updated successfully' });
     } catch (error) {
@@ -1722,6 +1731,7 @@ app.post('/storeInvestment', async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 });
+
 
 // Fetch and update investment
 app.get('/fetchInvestment/:userId', async (req, res) => {
@@ -1786,7 +1796,7 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
 app.post('/withdraw', async (req, res) => {
     try {
         const { userId, amount, reason } = req.body;
-        
+
         // Validate input
         if (!userId || !amount || !reason) {
             return res.status(400).json({ message: 'Missing required fields' });
@@ -1794,34 +1804,34 @@ app.post('/withdraw', async (req, res) => {
 
         const userRef = db.ref(`users/${userId}`);
         const userSnapshot = await userRef.once('value');
-        
+
         if (!userSnapshot.exists()) {
             return res.status(404).json({ message: 'User not found' });
         }
 
         const investment = userSnapshot.val().investment;
-        
+
         if (!investment) {
             return res.status(404).json({ message: 'No investment found for this user' });
         }
 
         const { amount: currentInvestmentAmount, payout } = investment;
-        let newAmount;
+        let newAmount = currentInvestmentAmount;
         let newPayout = payout || 0;
 
         // Process withdrawal based on reason
-        if (reason === 'profits') {
+        if (reason === 'Withdraw profits') {
             if (amount > newPayout) {
                 return res.status(400).json({ message: 'Insufficient profits for withdrawal' });
             }
             newPayout -= amount; // Deduct from payout
-        } else if (reason === 'capital') {
+        } else if (reason === 'Withdraw capital') {
             if (amount > currentInvestmentAmount) {
                 return res.status(400).json({ message: 'Insufficient capital for withdrawal' });
             }
-            newAmount = currentInvestmentAmount - amount; // Deduct from capital
+            newAmount -= amount; // Deduct from capital
         } else {
-            return res.status(400).json({ message: 'Invalid reason. Use "profits" or "capital"' });
+            return res.status(400).json({ message: 'Invalid reason. Use "Withdraw profits" or "Withdraw capital"' });
         }
 
         const now = new Date().toISOString();
@@ -1836,9 +1846,7 @@ app.post('/withdraw', async (req, res) => {
 
         // Update investment with new amount and payout
         const updates = {};
-        if (newAmount !== undefined) {
-            updates['/investment/amount'] = newAmount;
-        }
+        updates['/investment/amount'] = newAmount;
         updates['/investment/payout'] = newPayout;
         updates['/investment/lastUpdated'] = now;
 
