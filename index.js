@@ -1688,7 +1688,6 @@ app.patch('/api/update-casino-capital', async (req, res) => {
 
 
 
-
 // Store or update investment
 app.post('/storeInvestment', async (req, res) => {
     try {
@@ -1706,13 +1705,11 @@ app.post('/storeInvestment', async (req, res) => {
             const newAmount = existing.amount + amount;
             await investmentRef.update({
                 amount: newAmount,
-                investmentBalance: newAmount,
                 lastUpdated: now.toISOString()
             });
         } else {
             await investmentRef.set({
                 amount,
-                investmentBalance: amount,
                 payout: 0,
                 lastUpdated: now.toISOString(),
                 startDate: now.toISOString().split('T')[0]
@@ -1751,7 +1748,13 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
             const txTime = txDate.toISOString();
             const dailyIncome = parseFloat((investment.amount * 0.01).toFixed(2));
             totalPayout = parseFloat((totalPayout + dailyIncome).toFixed(2));
-            await transactionsRef.push({ amount: dailyIncome, time: txTime });
+
+            // Store each transaction with amount, time, and reason
+            await transactionsRef.push({
+                amount: dailyIncome,
+                time: txTime,
+                reason: "Commission paid"
+            });
         }
 
         await investmentRef.update({
@@ -1765,13 +1768,83 @@ app.get('/fetchInvestment/:userId', async (req, res) => {
         res.status(200).json({
             userId,
             amount: investment.amount,
-            investmentBalance: investment.investmentBalance,
             payout: totalPayout,
             startDate: investment.startDate,
             transactions: txHistory
         });
     } catch (error) {
         console.error('Error fetching investment:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+
+
+// Withdraw payout or capital
+app.post('/withdraw', async (req, res) => {
+    try {
+        const { userId, amount, reason } = req.body;
+        
+        // Validate input
+        if (!userId || !amount || !reason) {
+            return res.status(400).json({ message: 'Missing required fields' });
+        }
+
+        const userRef = db.ref(`users/${userId}`);
+        const userSnapshot = await userRef.once('value');
+        
+        if (!userSnapshot.exists()) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const investment = userSnapshot.val().investment;
+        
+        if (!investment) {
+            return res.status(404).json({ message: 'No investment found for this user' });
+        }
+
+        const { amount: currentInvestmentAmount, payout } = investment;
+        let newAmount;
+        let newPayout = payout || 0;
+
+        // Process withdrawal based on reason
+        if (reason === 'profits') {
+            if (amount > newPayout) {
+                return res.status(400).json({ message: 'Insufficient profits for withdrawal' });
+            }
+            newPayout -= amount; // Deduct from payout
+        } else if (reason === 'capital') {
+            if (amount > currentInvestmentAmount) {
+                return res.status(400).json({ message: 'Insufficient capital for withdrawal' });
+            }
+            newAmount = currentInvestmentAmount - amount; // Deduct from capital
+        } else {
+            return res.status(400).json({ message: 'Invalid reason. Use "profits" or "capital"' });
+        }
+
+        const now = new Date().toISOString();
+        const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
+
+        // Store the withdrawal transaction
+        await transactionsRef.push({
+            amount,
+            time: now,
+            reason,
+        });
+
+        // Update investment with new amount and payout
+        const updates = {};
+        if (newAmount !== undefined) {
+            updates['/investment/amount'] = newAmount;
+        }
+        updates['/investment/payout'] = newPayout;
+        updates['/investment/lastUpdated'] = now;
+
+        await userRef.update(updates);
+
+        res.status(200).json({ message: 'Withdrawal successful' });
+    } catch (error) {
+        console.error('Error processing withdrawal:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
