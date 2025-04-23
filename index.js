@@ -1688,183 +1688,215 @@ app.patch('/api/update-casino-capital', async (req, res) => {
 
 
 
-// Store or update investment
-app.post('/storeInvestment', async (req, res) => {
-    try {
-        const { userId, amount, premium = 0 } = req.body;  // Default premium is 0 if not provided
-        if (!userId || !amount) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
+// Endpoint to return all countries, currency codes, and country codes
+app.get('/api/countries', (req, res) => {
+    const countriesData = [
+    { "country": "Afghanistan", "currency_code": "AFN", "country_code": "+93", "flag": "🇦🇫", "phone_length": 9 },
+    { "country": "Albania", "currency_code": "ALL", "country_code": "+355", "flag": "🇦🇱", "phone_length": 9 },
+    { "country": "Algeria", "currency_code": "DZD", "country_code": "+213", "flag": "🇩🇿", "phone_length": 9 },
+    { "country": "Andorra", "currency_code": "EUR", "country_code": "+376", "flag": "🇦🇩", "phone_length": 6 },
+    { "country": "Angola", "currency_code": "AOA", "country_code": "+244", "flag": "🇦🇴", "phone_length": 9 },
+    { "country": "Antigua and Barbuda", "currency_code": "XCD", "country_code": "+1-268", "flag": "🇦🇬", "phone_length": 7 },
+    { "country": "Argentina", "currency_code": "ARS", "country_code": "+54", "flag": "🇦🇷", "phone_length": 10 },
+    { "country": "Armenia", "currency_code": "AMD", "country_code": "+374", "flag": "🇦🇲", "phone_length": 8 },
+    { "country": "Australia", "currency_code": "AUD", "country_code": "+61", "flag": "🇦🇺", "phone_length": 9 },
+    { "country": "Austria", "currency_code": "EUR", "country_code": "+43", "flag": "🇦🇹", "phone_length": 10 },
+    { "country": "Azerbaijan", "currency_code": "AZN", "country_code": "+994", "flag": "🇦🇿", "phone_length": 9 },
+    { "country": "Bahamas", "currency_code": "BSD", "country_code": "+1-242", "flag": "🇧🇸", "phone_length": 7 },
+    { "country": "Bahrain", "currency_code": "BHD", "country_code": "+973", "flag": "🇧🇭", "phone_length": 8 },
+    { "country": "Bangladesh", "currency_code": "BDT", "country_code": "+880", "flag": "🇧🇩", "phone_length": 11 },
+    { "country": "Barbados", "currency_code": "BBD", "country_code": "+1-246", "flag": "🇧🇧", "phone_length": 7 },
+    { "country": "Belarus", "currency_code": "BYN", "country_code": "+375", "flag": "🇧🇾", "phone_length": 9 },
+    { "country": "Belgium", "currency_code": "EUR", "country_code": "+32", "flag": "🇧🇪", "phone_length": 9 },
+    { "country": "Belize", "currency_code": "BZD", "country_code": "+501", "flag": "🇧🇿", "phone_length": 7 },
+    { "country": "Benin", "currency_code": "CFA", "country_code": "+229", "flag": "🇧🇯", "phone_length": 8 },
+    { "country": "Bhutan", "currency_code": "BTN", "country_code": "+975", "flag": "🇧🇹", "phone_length": 8 },
+    { "country": "Bolivia", "currency_code": "BOB", "country_code": "+591", "flag": "🇧🇴", "phone_length": 8 },
+    { "country": "Bosnia and Herzegovina", "currency_code": "BAM", "country_code": "+387", "flag": "🇧🇦", "phone_length": 8 },
+    { "country": "Botswana", "currency_code": "BWP", "country_code": "+267", "flag": "🇧🇼", "phone_length": 7 },
+    { "country": "Brazil", "currency_code": "BRL", "country_code": "+55", "flag": "🇧🇷", "phone_length": 11 },
+    { "country": "Brunei", "currency_code": "BND", "country_code": "+673", "flag": "🇧🇳", "phone_length": 7 },
+    { "country": "Bulgaria", "currency_code": "BGN", "country_code": "+359", "flag": "🇧🇬", "phone_length": 9 },
+    { "country": "Burkina Faso", "currency_code": "CFA", "country_code": "+226", "flag": "🇧🇫", "phone_length": 8 },
+    { "country": "Burundi", "currency_code": "BIF", "country_code": "+257", "flag": "🇧🇮", "phone_length": 8 },
+    { "country": "Cabo Verde", "currency_code": "CVE", "country_code": "+238", "flag": "🇨🇻", "phone_length": 7 },
+    { "country": "Cambodia", "currency_code": "KHR", "country_code": "+855", "flag": "🇰🇭", "phone_length": 9 },
+    { "country": "Cameroon", "currency_code": "CFA", "country_code": "+237", "flag": "🇨🇲", "phone_length": 9 },
+    { "country": "Canada", "currency_code": "CAD", "country_code": "+1", "flag": "🇨🇦", "phone_length": 10 },
+    { "country": "Central African Republic", "currency_code": "XAF", "country_code": "+236", "flag": "🇨🇫", "phone_length": 8 },
+    { "country": "Chad", "currency_code": "XAF", "country_code": "+235", "flag": "🇹🇩", "phone_length": 8 },
+    { "country": "Chile", "currency_code": "CLP", "country_code": "+56", "flag": "🇨🇱", "phone_length": 9 },
+    { "country": "China", "currency_code": "CNY", "country_code": "+86", "flag": "🇨🇳", "phone_length": 11 },
+    { "country": "Colombia", "currency_code": "COP", "country_code": "+57", "flag": "🇨🇴", "phone_length": 10 },
+    { "country": "Comoros", "currency_code": "COM", "country_code": "+269", "flag": "🇰🇲", "phone_length": 7 },
+    { "country": "Congo (Congo-Brazzaville)", "currency_code": "CDF", "country_code": "+242", "flag": "🇨🇬", "phone_length": 9 },
+    { "country": "Congo (Democratic Republic)", "currency_code": "CDF", "country_code": "+243", "flag": "🇨🇩", "phone_length": 9 },
+    { "country": "Costa Rica", "currency_code": "CRC", "country_code": "+506", "flag": "🇨🇷", "phone_length": 8 },
+    { "country": "Croatia", "currency_code": "HRK", "country_code": "+385", "flag": "🇭🇷", "phone_length": 9 },
+    { "country": "Cuba", "currency_code": "CUP", "country_code": "+53", "flag": "🇨🇺", "phone_length": 8 },
+    { "country": "Cyprus", "currency_code": "CYP", "country_code": "+357", "flag": "🇨🇾", "phone_length": 8 },
+    { "country": "Czech Republic", "currency_code": "CZK", "country_code": "+420", "flag": "🇨🇿", "phone_length": 9 },
+    { "country": "Denmark", "currency_code": "DKK", "country_code": "+45", "flag": "🇩🇰", "phone_length": 8 },
+    { "country": "Djibouti", "currency_code": "DJF", "country_code": "+253", "flag": "🇩🇯", "phone_length": 8 },
+    { "country": "Dominica", "currency_code": "XCD", "country_code": "+1-767", "flag": "🇩🇲", "phone_length": 7 },
+    { "country": "Dominican Republic", "currency_code": "DOP", "country_code": "+1-809", "flag": "🇩🇴", "phone_length": 10 },
+    { "country": "Ecuador", "currency_code": "USD", "country_code": "+593", "flag": "🇪🇨", "phone_length": 9 },
+    { "country": "Egypt", "currency_code": "EGP", "country_code": "+20", "flag": "🇪🇬", "phone_length": 10 },
+    { "country": "El Salvador", "currency_code": "SVC", "country_code": "+503", "flag": "🇸🇻", "phone_length": 8 },
+    { "country": "Equatorial Guinea", "currency_code": "GNF", "country_code": "+240", "flag": "🇬🇶", "phone_length": 9 },
+    { "country": "Eritrea", "currency_code": "ERN", "country_code": "+291", "flag": "🇪🇷", "phone_length": 8 },
+    { "country": "Estonia", "currency_code": "EUR", "country_code": "+372", "flag": "🇪🇪", "phone_length": 9 },
+    { "country": "Eswatini", "currency_code": "SZL", "country_code": "+268", "flag": "🇸🇿", "phone_length": 9 },
+    { "country": "Ethiopia", "currency_code": "ETB", "country_code": "+251", "flag": "🇪🇹", "phone_length": 10 },
+    { "country": "Fiji", "currency_code": "FJD", "country_code": "+679", "flag": "🇫🇯", "phone_length": 7 },
+    
+    { "country": "Finland", "currency_code": "EUR", "country_code": "+358", "flag": "🇫🇮", "phone_length": 9 },
+    { "country": "France", "currency_code": "EUR", "country_code": "+33", "flag": "🇫🇷", "phone_length": 9 },
+    { "country": "Gabon", "currency_code": "GAB", "country_code": "+241", "flag": "🇬🇦", "phone_length": 8 },
+    { "country": "Gambia", "currency_code": "GMD", "country_code": "+220", "flag": "🇬🇲", "phone_length": 7 },
+    { "country": "Georgia", "currency_code": "GEL", "country_code": "+995", "flag": "🇬🇪", "phone_length": 9 },
+    { "country": "Germany", "currency_code": "EUR", "country_code": "+49", "flag": "🇩🇪", "phone_length": 10 },
+    { "country": "Ghana", "currency_code": "GHS", "country_code": "+233", "flag": "🇬🇭", "phone_length": 9 },
+    { "country": "Greece", "currency_code": "EUR", "country_code": "+30", "flag": "🇬🇷", "phone_length": 10 },
+    { "country": "Grenada", "currency_code": "XCD", "country_code": "+1-473", "flag": "🇬🇩", "phone_length": 7 },
+    { "country": "Guatemala", "currency_code": "GTQ", "country_code": "+502", "flag": "🇬🇹", "phone_length": 8 },
+    { "country": "Guinea", "currency_code": "GNF", "country_code": "+224", "flag": "🇬🇳", "phone_length": 9 },
+    { "country": "Guinea-Bissau", "currency_code": "GNF", "country_code": "+245", "flag": "🇬🇼", "phone_length": 8 },
+    { "country": "Guyana", "currency_code": "GYD", "country_code": "+592", "flag": "🇬🇾", "phone_length": 7 },
+    { "country": "Haiti", "currency_code": "HTG", "country_code": "+509", "flag": "🇭🇹", "phone_length": 8 },
+    { "country": "Honduras", "currency_code": "HNL", "country_code": "+504", "flag": "🇭🇳", "phone_length": 8 },
+    { "country": "Hungary", "currency_code": "HUF", "country_code": "+36", "flag": "🇭🇺", "phone_length": 9 },
+    { "country": "Iceland", "currency_code": "ISK", "country_code": "+354", "flag": "🇮🇸", "phone_length": 7 },
+    { "country": "India", "currency_code": "INR", "country_code": "+91", "flag": "🇮🇳", "phone_length": 10 },
+    { "country": "Indonesia", "currency_code": "IDR", "country_code": "+62", "flag": "🇮🇩", "phone_length": 10 },
+    { "country": "Iran", "currency_code": "IRR", "country_code": "+98", "flag": "🇮🇷", "phone_length": 10 },
+    { "country": "Iraq", "currency_code": "IQD", "country_code": "+964", "flag": "🇮🇶", "phone_length": 9 },
+    { "country": "Ireland", "currency_code": "EUR", "country_code": "+353", "flag": "🇮🇪", "phone_length": 9 },
+    { "country": "Israel", "currency_code": "ILS", "country_code": "+972", "flag": "🇮🇱", "phone_length": 9 },
+    { "country": "Italy", "currency_code": "EUR", "country_code": "+39", "flag": "🇮🇹", "phone_length": 10 },
+    { "country": "Jamaica", "currency_code": "JMD", "country_code": "+1-876", "flag": "🇯🇲", "phone_length": 7 },
+    { "country": "Japan", "currency_code": "JPY", "country_code": "+81", "flag": "🇯🇵", "phone_length": 10 },
+    { "country": "Jordan", "currency_code": "JOD", "country_code": "+962", "flag": "🇯🇴", "phone_length": 9 },
+    { "country": "Kazakhstan", "currency_code": "KZT", "country_code": "+7", "flag": "🇰🇿", "phone_length": 10 },
+    { "country": "Kenya", "currency_code": "KES", "country_code": "+254", "flag": "🇰🇪", "phone_length": 9 },
+    { "country": "Kiribati", "currency_code": "AUD", "country_code": "+686", "flag": "🇰🇮", "phone_length": 7 },
+    { "country": "Korea (North)", "currency_code": "KPW", "country_code": "+850", "flag": "🇰🇵", "phone_length": 8 },
+    { "country": "Korea (South)", "currency_code": "KRW", "country_code": "+82", "flag": "🇰🇷", "phone_length": 10 },
+    { "country": "Kuwait", "currency_code": "KWD", "country_code": "+965", "flag": "🇰🇼", "phone_length": 8 },
+    { "country": "Kyrgyzstan", "currency_code": "KGS", "country_code": "+996", "flag": "🇰🇬", "phone_length": 9 },
+    { "country": "Laos", "currency_code": "LAK", "country_code": "+856", "flag": "🇱🇸", "phone_length": 8 },
+    { "country": "Latvia", "currency_code": "EUR", "country_code": "+371", "flag": "🇱🇻", "phone_length": 8 },
+    { "country": "Lebanon", "currency_code": "LBP", "country_code": "+961", "flag": "🇱🇧", "phone_length": 8 },
+    { "country": "Lesotho", "currency_code": "LSL", "country_code": "+266", "flag": "🇱🇸", "phone_length": 8 },
+    { "country": "Liberia", "currency_code": "LRD", "country_code": "+231", "flag": "🇱🇷", "phone_length": 8 },
+    { "country": "Libya", "currency_code": "LYD", "country_code": "+218", "flag": "🇱🇾", "phone_length": 9 },
+    { "country": "Liechtenstein", "currency_code": "CHF", "country_code": "+423", "flag": "🇱🇮", "phone_length": 8 },
+    { "country": "Lithuania", "currency_code": "EUR", "country_code": "+370", "flag": "🇱🇹", "phone_length": 8 },
+    { "country": "Luxembourg", "currency_code": "EUR", "country_code": "+352", "flag": "🇱🇺", "phone_length": 9 },
+    { "country": "Madagascar", "currency_code": "MGA", "country_code": "+261", "flag": "🇲🇬", "phone_length": 9 },
+    { "country": "Malawi", "currency_code": "MWK", "country_code": "+265", "flag": "🇲🇼", "phone_length": 9 },
+    { "country": "Malaysia", "currency_code": "MYR", "country_code": "+60", "flag": "🇲🇾", "phone_length": 10 },
+    { "country": "Maldives", "currency_code": "MVR", "country_code": "+960", "flag": "🇲🇻", "phone_length": 7 },
+    { "country": "Mali", "currency_code": "CFA", "country_code": "+223", "flag": "🇲🇱", "phone_length": 8 },
+    { "country": "Malta", "currency_code": "EUR", "country_code": "+356", "flag": "🇲🇹", "phone_length": 8 },
+    { "country": "Marshall Islands", "currency_code": "USD", "country_code": "+692", "flag": "🇲🇭", "phone_length": 7 },
+    { "country": "Mauritania", "currency_code": "MRU", "country_code": "+222", "flag": "🇲🇷", "phone_length": 9 },
+    
+    { "country": "Mauritius", "currency_code": "MUR", "country_code": "+230", "flag": "🇲🇺", "phone_length": 8 },
+    { "country": "Mexico", "currency_code": "MXN", "country_code": "+52", "flag": "🇲🇽", "phone_length": 10 },
+    { "country": "Micronesia", "currency_code": "USD", "country_code": "+691", "flag": "🇫🇲", "phone_length": 7 },
+    { "country": "Moldova", "currency_code": "MDL", "country_code": "+373", "flag": "🇲🇩", "phone_length": 8 },
+    { "country": "Monaco", "currency_code": "EUR", "country_code": "+377", "flag": "🇲🇨", "phone_length": 8 },
+    { "country": "Mongolia", "currency_code": "MNT", "country_code": "+976", "flag": "🇲🇳", "phone_length": 8 },
+    { "country": "Montenegro", "currency_code": "EUR", "country_code": "+382", "flag": "🇲🇪", "phone_length": 8 },
+    { "country": "Morocco", "currency_code": "MAD", "country_code": "+212", "flag": "🇲🇦", "phone_length": 9 },
+    { "country": "Mozambique", "currency_code": "MZN", "country_code": "+258", "flag": "🇲🇿", "phone_length": 9 },
+    { "country": "Myanmar", "currency_code": "MMK", "country_code": "+95", "flag": "🇲🇲", "phone_length": 9 },
+    { "country": "Namibia", "currency_code": "NAD", "country_code": "+264", "flag": "🇳🇦", "phone_length": 9 },
+    { "country": "Nauru", "currency_code": "AUD", "country_code": "+674", "flag": "🇳🇷", "phone_length": 7 },
+    { "country": "Nepal", "currency_code": "NPR", "country_code": "+977", "flag": "🇳🇵", "phone_length": 10 },
+    { "country": "Netherlands", "currency_code": "EUR", "country_code": "+31", "flag": "🇳🇱", "phone_length": 9 },
+    { "country": "New Zealand", "currency_code": "NZD", "country_code": "+64", "flag": "🇳🇿", "phone_length": 9 },
+    { "country": "Nicaragua", "currency_code": "NIO", "country_code": "+505", "flag": "🇳🇮", "phone_length": 8 },
+    { "country": "Niger", "currency_code": "NGN", "country_code": "+227", "flag": "🇳🇪", "phone_length": 8 },
+    { "country": "Nigeria", "currency_code": "NGN", "country_code": "+234", "flag": "🇳🇬", "phone_length": 10 },
+    { "country": "North Macedonia", "currency_code": "MKD", "country_code": "+389", "flag": "🇲🇰", "phone_length": 9 },
+    { "country": "Norway", "currency_code": "NOK", "country_code": "+47", "flag": "🇳🇴", "phone_length": 8 },
+    { "country": "Oman", "currency_code": "OMR", "country_code": "+968", "flag": "🇴🇲", "phone_length": 8 },
+    { "country": "Pakistan", "currency_code": "PKR", "country_code": "+92", "flag": "🇵🇰", "phone_length": 10 },
+    { "country": "Palau", "currency_code": "USD", "country_code": "+680", "flag": "🇵🇼", "phone_length": 7 },
+    { "country": "Panama", "currency_code": "PAB", "country_code": "+507", "flag": "🇵🇦", "phone_length": 8 },
+    { "country": "Papua New Guinea", "currency_code": "PGK", "country_code": "+675", "flag": "🇵🇬", "phone_length": 8 },
+    { "country": "Paraguay", "currency_code": "PYG", "country_code": "+595", "flag": "🇵🇾", "phone_length": 9 },
+    { "country": "Peru", "currency_code": "PEN", "country_code": "+51", "flag": "🇵🇪", "phone_length": 9 },
+    { "country": "Philippines", "currency_code": "PHP", "country_code": "+63", "flag": "🇵🇭", "phone_length": 10 },
+    { "country": "Poland", "currency_code": "PLN", "country_code": "+48", "flag": "🇵🇱", "phone_length": 9 },
+    { "country": "Portugal", "currency_code": "EUR", "country_code": "+351", "flag": "🇵🇹", "phone_length": 9 },
+    { "country": "Qatar", "currency_code": "QAR", "country_code": "+974", "flag": "🇶🇦", "phone_length": 8 },
+    { "country": "Romania", "currency_code": "RON", "country_code": "+40", "flag": "🇷🇴", "phone_length": 9 },
+    { "country": "Russia", "currency_code": "RUB", "country_code": "+7", "flag": "🇷🇺", "phone_length": 10 },
+    { "country": "Rwanda", "currency_code": "RWF", "country_code": "+250", "flag": "🇷🇼", "phone_length": 9 },
+    { "country": "Saint Kitts and Nevis", "currency_code": "XCD", "country_code": "+1-869", "flag": "🇰🇳", "phone_length": 7 },
+    { "country": "Saint Lucia", "currency_code": "XCD", "country_code": "+1-758", "flag": "🇱🇨", "phone_length": 7 },
+    { "country": "Saint Vincent and the Grenadines", "currency_code": "XCD", "country_code": "+1-784", "flag": "🇻🇨", "phone_length": 7 },
+    { "country": "Samoa", "currency_code": "WST", "country_code": "+685", "flag": "🇼🇸", "phone_length": 7 },
+    { "country": "San Marino", "currency_code": "EUR", "country_code": "+378", "flag": "🇸🇲", "phone_length": 9 },
+    { "country": "Sao Tome and Principe", "currency_code": "STN", "country_code": "+239", "flag": "🇸🇹", "phone_length": 7 },
+    { "country": "Saudi Arabia", "currency_code": "SAR", "country_code": "+966", "flag": "🇸🇦", "phone_length": 9 },
+    { "country": "Senegal", "currency_code": "CFA", "country_code": "+221", "flag": "🇸🇳", "phone_length": 9 },
+    { "country": "Serbia", "currency_code": "RSD", "country_code": "+381", "flag": "🇷🇸", "phone_length": 9 },
+    { "country": "Seychelles", "currency_code": "SCR", "country_code": "+248", "flag": "🇸🇨", "phone_length": 7 },
+    { "country": "Sierra Leone", "currency_code": "SLL", "country_code": "+232", "flag": "🇸🇱", "phone_length": 8 },
+    { "country": "Singapore", "currency_code": "SGD", "country_code": "+65", "flag": "🇸🇬", "phone_length": 8 },
+    { "country": "Slovakia", "currency_code": "EUR", "country_code": "+421", "flag": "🇸🇰", "phone_length": 9 },
+    { "country": "Slovenia", "currency_code": "EUR", "country_code": "+386", "flag": "🇸🇮", "phone_length": 8 },
+    { "country": "Solomon Islands", "currency_code": "SBD", "country_code": "+677", "flag": "🇸🇧", "phone_length": 7 },
+    
+    { "country": "Somalia", "currency_code": "SOS", "country_code": "+252", "flag": "🇸🇴", "phone_length": 9 },
+    { "country": "South Africa", "currency_code": "ZAR", "country_code": "+27", "flag": "🇿🇦", "phone_length": 10 },
+    { "country": "South Korea", "currency_code": "KRW", "country_code": "+82", "flag": "🇰🇷", "phone_length": 9 },
+    { "country": "South Sudan", "currency_code": "SSP", "country_code": "+211", "flag": "🇸🇸", "phone_length": 9 },
+    { "country": "Spain", "currency_code": "EUR", "country_code": "+34", "flag": "🇪🇸", "phone_length": 9 },
+    { "country": "Sri Lanka", "currency_code": "LKR", "country_code": "+94", "flag": "🇱🇰", "phone_length": 10 },
+    { "country": "Sudan", "currency_code": "SDG", "country_code": "+249", "flag": "🇸🇩", "phone_length": 9 },
+    { "country": "Suriname", "currency_code": "SRD", "country_code": "+597", "flag": "🇸🇷", "phone_length": 8 },
+    { "country": "Sweden", "currency_code": "SEK", "country_code": "+46", "flag": "🇸🇪", "phone_length": 10 },
+    { "country": "Switzerland", "currency_code": "CHF", "country_code": "+41", "flag": "🇨🇭", "phone_length": 9 },
+    { "country": "Syria", "currency_code": "SYP", "country_code": "+963", "flag": "🇸🇾", "phone_length": 9 },
+    { "country": "Taiwan", "currency_code": "TWD", "country_code": "+886", "flag": "🇹🇼", "phone_length": 10 },
+    { "country": "Tajikistan", "currency_code": "TJS", "country_code": "+992", "flag": "🇹🇯", "phone_length": 9 },
+    { "country": "Tanzania", "currency_code": "TZS", "country_code": "+255", "flag": "🇹🇿", "phone_length": 9 },
+    { "country": "Thailand", "currency_code": "THB", "country_code": "+66", "flag": "🇹🇭", "phone_length": 9 },
+    { "country": "Timor-Leste", "currency_code": "USD", "country_code": "+670", "flag": "🇹🇱", "phone_length": 7 },
+    { "country": "Togo", "currency_code": "XOF", "country_code": "+228", "flag": "🇹🇬", "phone_length": 8 },
+    { "country": "Tonga", "currency_code": "TOP", "country_code": "+676", "flag": "🇹🇴", "phone_length": 7 },
+    { "country": "Trinidad and Tobago", "currency_code": "TTD", "country_code": "+1-868", "flag": "🇹🇹", "phone_length": 7 },
+    { "country": "Tunisia", "currency_code": "TND", "country_code": "+216", "flag": "🇹🇳", "phone_length": 8 },
+    { "country": "Turkey", "currency_code": "TRY", "country_code": "+90", "flag": "🇹🇷", "phone_length": 10 },
+    { "country": "Turkmenistan", "currency_code": "TMT", "country_code": "+993", "flag": "🇹🇲", "phone_length": 9 },
+    { "country": "Tuvalu", "currency_code": "AUD", "country_code": "+688", "flag": "🇹🇻", "phone_length": 7 },
+    { "country": "Uganda", "currency_code": "UGX", "country_code": "+256", "flag": "🇺🇬", "phone_length": 9 },
+    { "country": "Ukraine", "currency_code": "UAH", "country_code": "+380", "flag": "🇺🇦", "phone_length": 9 },
+    { "country": "United Arab Emirates", "currency_code": "AED", "country_code": "+971", "flag": "🇦🇪", "phone_length": 9 },
+    { "country": "United Kingdom", "currency_code": "GBP", "country_code": "+44", "flag": "🇬🇧", "phone_length": 10 },
+    { "country": "United States", "currency_code": "USD", "country_code": "+1", "flag": "🇺🇸", "phone_length": 10 },
+    { "country": "Uruguay", "currency_code": "UYU", "country_code": "+598", "flag": "🇺🇾", "phone_length": 8 },
+    { "country": "Uzbekistan", "currency_code": "UZS", "country_code": "+998", "flag": "🇺🇿", "phone_length": 9 },
+    { "country": "Vanuatu", "currency_code": "VUV", "country_code": "+678", "flag": "🇻🇺", "phone_length": 7 },
+    { "country": "Vatican City", "currency_code": "EUR", "country_code": "+379", "flag": "🇻🇦", "phone_length": 9 },
+    { "country": "Venezuela", "currency_code": "VES", "country_code": "+58", "flag": "🇻🇪", "phone_length": 10 },
+    { "country": "Vietnam", "currency_code": "VND", "country_code": "+84", "flag": "🇻🇳", "phone_length": 10 },
+    { "country": "Yemen", "currency_code": "YER", "country_code": "+967", "flag": "🇾🇪", "phone_length": 9 },
+    { "country": "Zambia", "currency_code": "ZMW", "country_code": "+260", "flag": "🇿🇲", "phone_length": 9 },
+    { "country": "Zimbabwe", "currency_code": "ZWL", "country_code": "+263", "flag": "🇿🇼", "phone_length": 9 }
+];
 
-        const now = new Date();
-        const nowISO = now.toISOString();
-        const investmentRef = db.ref(`users/${userId}/investment`);
-        const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
-        const snapshot = await investmentRef.once('value');
-
-        if (snapshot.exists()) {
-            const existing = snapshot.val();
-            const newAmount = existing.amount + amount;
-            await investmentRef.update({
-                amount: newAmount,
-                lastUpdated: nowISO,
-                premium,  // Store premium value in the database
-            });
-        } else {
-            await investmentRef.set({
-                amount,
-                payout: 0,
-                lastUpdated: nowISO,
-                premium,  // Store premium value for the new investment
-                startDate: nowISO.split('T')[0]
-            });
-        }
-
-        // Log the investment transaction
-        await transactionsRef.push({
-            amount,
-            time: nowISO,
-            reason: 'Investment added'
-        });
-
-        res.status(200).json({ message: 'Investment stored/updated successfully' });
-    } catch (error) {
-        console.error('Error storing investment:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
+    res.json(countriesData);
 });
 
 
-// Fetch and update investment
-app.get('/fetchInvestment/:userId', async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const investmentRef = db.ref(`users/${userId}/investment`);
-        const snapshot = await investmentRef.once('value');
-
-        if (!snapshot.exists()) {
-            return res.status(404).json({ message: 'No investment found for this user' });
-        }
-
-        const investment = snapshot.val();
-        const currentTime = new Date();
-        let lastUpdated = new Date(investment.lastUpdated);
-        const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
-        let totalPayout = investment.payout || 0;
-        const premium = investment.premium || 0;  // Default premium is 0 if not found
-
-        // Calculate how many full 24-hour periods have passed
-        let payoutCount = 0;
-        while ((currentTime - lastUpdated) >= 24 * 60 * 60 * 1000) {
-            payoutCount++;
-            lastUpdated = new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
-
-            // If premium is 0, use 1% (0.01) for the daily income calculation
-            const dailyIncome = parseFloat((investment.amount * (premium > 0 ? premium / 100 : 0.01)).toFixed(2));
-            totalPayout = parseFloat((totalPayout + dailyIncome).toFixed(2));
-
-            await transactionsRef.push({
-                amount: dailyIncome,
-                time: lastUpdated.toISOString(),
-                reason: "Commission paid"
-            });
-        }
-
-        // Only update if there was a payout
-        if (payoutCount > 0) {
-            await investmentRef.update({
-                payout: totalPayout,
-                lastUpdated: lastUpdated.toISOString()
-            });
-        }
-
-        const txSnapshot = await transactionsRef.once('value');
-        const txHistory = txSnapshot.exists() ? Object.values(txSnapshot.val()) : [];
-
-        res.status(200).json({
-            userId,
-            amount: investment.amount,
-            payout: totalPayout,
-            startDate: investment.startDate,
-            lastUpdated: investment.lastUpdated,  // Include lastUpdated
-            premium,  // Include premium in the response
-            transactions: txHistory
-        });
-    } catch (error) {
-        console.error('Error fetching investment:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
 
 
-
-
-// Withdraw payout or capital
-app.post('/withdraw', async (req, res) => {
-    try {
-        const { userId, amount, reason } = req.body;
-
-        // Validate input
-        if (!userId || !amount || !reason) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
-
-        const userRef = db.ref(`users/${userId}`);
-        const userSnapshot = await userRef.once('value');
-
-        if (!userSnapshot.exists()) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const investment = userSnapshot.val().investment;
-
-        if (!investment) {
-            return res.status(404).json({ message: 'No investment found for this user' });
-        }
-
-        const { amount: currentInvestmentAmount, payout } = investment;
-        let newAmount = currentInvestmentAmount;
-        let newPayout = payout || 0;
-
-        // Process withdrawal based on reason
-        if (reason === 'Withdraw profits') {
-            if (amount > newPayout) {
-                return res.status(400).json({ message: 'Insufficient profits for withdrawal' });
-            }
-            newPayout -= amount; // Deduct from payout
-        } else if (reason === 'Withdraw capital') {
-            if (amount > currentInvestmentAmount) {
-                return res.status(400).json({ message: 'Insufficient capital for withdrawal' });
-            }
-            newAmount -= amount; // Deduct from capital
-        } else {
-            return res.status(400).json({ message: 'Invalid reason. Use "Withdraw profits" or "Withdraw capital"' });
-        }
-
-        const now = new Date().toISOString();
-        const transactionsRef = db.ref(`users/${userId}/investment/transactions`);
-
-        // Store the withdrawal transaction
-        await transactionsRef.push({
-            amount,
-            time: now,
-            reason,
-        });
-
-        // Update investment with new amount and payout
-        const updates = {};
-        updates['/investment/amount'] = newAmount;
-        updates['/investment/payout'] = newPayout;
-        updates['/investment/lastUpdated'] = now;
-
-        await userRef.update(updates);
-
-        res.status(200).json({ message: 'Withdrawal successful' });
-    } catch (error) {
-        console.error('Error processing withdrawal:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
 
 
 
